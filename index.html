@@ -130,6 +130,9 @@
         <button class="btn btn--primary js-only" type="button" id="intake-new">+ Añadir ingesta</button>
       </header>
 
+      <!-- A qué hora toca la siguiente ingesta: la calcula y la pinta app.js -->
+      <section class="next-intake js-only" id="next-intake" aria-label="Siguiente ingesta" aria-live="polite" hidden></section>
+
       <!-- Estado de la subpestaña: historial o resumen -->
       <input class="tab-state" type="radio" name="intake-view" id="intake-view-historial" checked>
       <input class="tab-state" type="radio" name="intake-view" id="intake-view-resumen">
@@ -572,8 +575,12 @@
         <div class="choices__row">
           <input class="choice__input" type="radio" name="intake-modal-title" id="intake-modal-title-desayuno" value="Desayuno" checked>
           <label class="choice" for="intake-modal-title-desayuno">Desayuno</label>
+          <input class="choice__input" type="radio" name="intake-modal-title" id="intake-modal-title-media-manana" value="Media mañana">
+          <label class="choice" for="intake-modal-title-media-manana">Media mañana</label>
           <input class="choice__input" type="radio" name="intake-modal-title" id="intake-modal-title-almuerzo" value="Almuerzo">
           <label class="choice" for="intake-modal-title-almuerzo">Almuerzo</label>
+          <input class="choice__input" type="radio" name="intake-modal-title" id="intake-modal-title-merienda" value="Merienda">
+          <label class="choice" for="intake-modal-title-merienda">Merienda</label>
           <input class="choice__input" type="radio" name="intake-modal-title" id="intake-modal-title-cena" value="Cena">
           <label class="choice" for="intake-modal-title-cena">Cena</label>
           <input class="choice__input" type="radio" name="intake-modal-title" id="intake-modal-title-snack" value="Snack">

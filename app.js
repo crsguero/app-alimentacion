@@ -1287,7 +1287,7 @@
 
   /* ---------- Ingestas ---------- */
 
-  var INTAKE_TITLES = ['Desayuno', 'Almuerzo', 'Cena', 'Snack'];
+  var INTAKE_TITLES = ['Desayuno', 'Media mañana', 'Almuerzo', 'Merienda', 'Cena', 'Snack'];
   var INTAKE_TITLE = 'Ingesta';   // el título de las ingestas guardadas antes de los botones
   var intakes = [];
   var iu = {};
@@ -1326,18 +1326,19 @@
     return dayKeyOf(date) === key ? key : '';
   }
 
-  /* Solo valen los cuatro títulos de los botones; "" si es cualquier otra cosa */
+  /* Solo valen los títulos de los botones; "" si es cualquier otra cosa */
   function cleanTitle(value) {
     var text = cleanName(value);
     return INTAKE_TITLES.indexOf(text) === -1 ? '' : text;
   }
 
-  /* Propuesta según la hora, para que dar de alta sea un solo toque */
+  /* Propuesta según la hora, para las ingestas viejas que no tienen un tipo válido */
   function titleForHour(hour) {
-    if (hour >= 6 && hour < 12) { return 'Desayuno'; }
+    if (hour >= 6 && hour < 10) { return 'Desayuno'; }
+    if (hour >= 10 && hour < 12) { return 'Media mañana'; }
     if (hour >= 12 && hour < 17) { return 'Almuerzo'; }
-    if (hour >= 20) { return 'Cena'; }
-    return 'Snack';
+    if (hour >= 17 && hour < 20) { return 'Merienda'; }
+    return 'Cena';                  // de 20 a 6
   }
 
   /* Los botones de título son radios: se leen y se marcan por el nombre del grupo */
@@ -1522,8 +1523,153 @@
 
   /* Las dos subpestañas se pintan siempre; cuál se ve lo decide el CSS */
   function renderIntakes() {
+    renderNextIntake();
     renderHistory();
     renderSummary();
+  }
+
+  /* ---------- Siguiente ingesta: a qué hora toca ---------- */
+
+  /* Las cinco que se planifican, en orden. Snack no cuenta: ni avanza el plan
+     ni sirve de referencia para las de media mañana y merienda. */
+  var PLAN_TITLES = ['Desayuno', 'Media mañana', 'Almuerzo', 'Merienda', 'Cena'];
+  var LUNCH_AT = 14 * 60 + 30;      // el almuerzo, siempre a las 14:30
+  var DINNER_AT = 20 * 60;          // la cena, siempre a las 20:00
+  var FAST_MINUTES = 12 * 60;       // el desayuno, 12 h después de la última ingesta de la víspera
+
+  function clockMinutes(time) {
+    var parts = time.split(':');
+    return Number(parts[0]) * 60 + Number(parts[1]);
+  }
+
+  /* Mismos minutos UTC que minutesOf(), de vuelta a día y hora */
+  function momentOf(minutes) {
+    var date = new Date(minutes * 60000);
+    return {
+      day: date.getUTCFullYear() + '-' + pad2(date.getUTCMonth() + 1) + '-' + pad2(date.getUTCDate()),
+      time: pad2(date.getUTCHours()) + ':' + pad2(date.getUTCMinutes())
+    };
+  }
+
+  /* La última ingesta (por hora) de las que cumplen la condición, o null */
+  function lastIntake(test) {
+    var found = null;
+    intakes.forEach(function (intake) {
+      if (test(intake) && (!found || minutesOf(intake) > minutesOf(found))) { found = intake; }
+    });
+    return found;
+  }
+
+  /* El desayuno de `day`: 12 h después de la última ingesta del día anterior, sea cual sea.
+     Sin ingestas ese día anterior no hay desde dónde contar: time queda a null. */
+  function breakfastPlan(day) {
+    var eve = dateOf(day);
+    eve.setDate(eve.getDate() - 1);
+    var eveKey = dayKeyOf(eve);
+
+    var last = lastIntake(function (intake) { return intake.day === eveKey; });
+    if (!last) { return { title: 'Desayuno', day: day, time: null }; }
+
+    var at = momentOf(minutesOf(last) + FAST_MINUTES);
+    return { title: 'Desayuno', day: at.day, time: at.time };
+  }
+
+  /* Hora a medio camino entre la ingesta registrada y la hora fija que viene después */
+  function midwayPlan(title, day, from, to) {
+    var at = Math.round((clockMinutes(from.time) + to) / 2);
+    return { title: title, day: day, time: pad2(Math.floor(at / 60)) + ':' + pad2(at % 60) };
+  }
+
+  /* Toca la que sigue a la más avanzada del plan que se haya registrado hoy:
+     si después del desayuno se registra el almuerzo, la media mañana se salta */
+  function nextIntakePlan() {
+    var today = dayKeyOf(new Date());
+    var reached = -1;
+
+    intakes.forEach(function (intake) {
+      if (intake.day === today) { reached = Math.max(reached, PLAN_TITLES.indexOf(intake.title)); }
+    });
+
+    /* La referencia es la última de ese tipo registrada hoy, no un snack posterior */
+    function lastOfToday(title) {
+      return lastIntake(function (intake) { return intake.day === today && intake.title === title; });
+    }
+
+    if (reached === -1) { return breakfastPlan(today); }
+    if (reached === 0) { return midwayPlan('Media mañana', today, lastOfToday('Desayuno'), LUNCH_AT); }
+    if (reached === 1) { return { title: 'Almuerzo', day: today, time: '14:30' }; }
+    if (reached === 2) { return midwayPlan('Merienda', today, lastOfToday('Almuerzo'), DINNER_AT); }
+    if (reached === 3) { return { title: 'Cena', day: today, time: '20:00' }; }
+
+    /* Con la cena hecha, toca el desayuno de mañana (contando lo que venga después de la cena) */
+    var tomorrow = dateOf(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return breakfastPlan(dayKeyOf(tomorrow));
+  }
+
+  /* "Hoy" no se dice: es lo normal. Mañana, o cualquier otro día, sí */
+  function planDayLabel(day) {
+    var tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    if (day === dayKeyOf(new Date())) { return ''; }
+    if (day === dayKeyOf(tomorrow)) { return 'Mañana'; }
+    return dayLabel(day);
+  }
+
+  function renderNextIntake() {
+    if (!iu.nextCard) { return; }
+
+    var plan = nextIntakePlan();
+    var when = planDayLabel(plan.day);
+
+    /* Se repinta cada minuto: solo se toca el DOM si algo ha cambiado, para que
+       el aria-live no lo anuncie una y otra vez */
+    var signature = [plan.title, plan.day, plan.time].join('|');
+    if (signature === iu.nextSignature) { return; }
+    iu.nextSignature = signature;
+
+    iu.nextCard.textContent = '';
+    iu.nextCard.hidden = false;
+
+    var text = document.createElement('div');
+    text.className = 'next-intake__text';
+
+    var label = document.createElement('span');
+    label.className = 'next-intake__label';
+    label.textContent = 'Siguiente ingesta';
+
+    var title = document.createElement('span');
+    title.className = 'next-intake__title';
+    title.textContent = plan.title;
+
+    text.appendChild(label);
+    text.appendChild(title);
+
+    if (!plan.time) {
+      var note = document.createElement('span');
+      note.className = 'next-intake__note';
+      note.textContent = 'Sin ingestas el día anterior, no hay desde dónde contar las 12 horas';
+      text.appendChild(note);
+    }
+
+    var time = document.createElement('div');
+    time.className = 'next-intake__when';
+
+    var clock = document.createElement('span');
+    clock.className = 'next-intake__time';
+    clock.textContent = plan.time || '—';
+    time.appendChild(clock);
+
+    if (plan.time && when) {
+      var day = document.createElement('span');
+      day.className = 'next-intake__day';
+      day.textContent = when;
+      time.appendChild(day);
+    }
+
+    iu.nextCard.appendChild(text);
+    iu.nextCard.appendChild(time);
   }
 
   function renderHistory() {
@@ -1846,6 +1992,11 @@
       iu.summaryPrev.addEventListener('click', function () { goToWeek(1); });
       iu.summaryNext.addEventListener('click', function () { goToWeek(-1); });
     }
+
+    /* Siguiente ingesta: depende también del reloj (al pasar la medianoche cambia
+       el día de referencia), así que se recalcula cada minuto */
+    iu.nextCard = document.getElementById('next-intake');
+    if (iu.nextCard) { setInterval(renderNextIntake, 60000); }
 
     intakes = loadIntakes();
     renderIntakes();

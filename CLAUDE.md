@@ -202,12 +202,38 @@ Se alternan con el mismo truco que las pestañas grandes: dos radios `.tab-state
 Funcionan sin JavaScript y con teclado. ⚠️ **Añadir una subpestaña obliga a tocar tres listas de
 selectores**: mostrar la sección, marcar la subpestaña activa y el foco visible.
 
+### Siguiente ingesta
+
+Encima de las subpestañas, la tarjeta `#next-intake` (`js-only`) dice **qué ingesta toca y a qué
+hora**. La calcula `nextIntakePlan()` y la pinta `renderNextIntake()`, que va dentro de
+`renderIntakes()` y además se relanza **cada minuto** con `setInterval` (al pasar la medianoche
+cambia el día de referencia). Solo toca el DOM si cambia el resultado, para que el `aria-live` no lo
+anuncie cada minuto.
+
+- Se planifican cinco (`PLAN_TITLES`): Desayuno, Media mañana, Almuerzo, Merienda y Cena. **Snack
+  no cuenta** para nada salvo para el desayuno (ver abajo).
+- **Toca la que sigue a la más avanzada del plan registrada hoy**, no la siguiente que falte: con
+  Desayuno registrado toca Media mañana; si luego se registra el Almuerzo sin Media mañana, toca la
+  Merienda. Registrar después una Media mañana atrasada no hace retroceder el plan.
+- **Desayuno**: 12 h después de la **última ingesta del día anterior, sea del tipo que sea**
+  (`breakfastPlan()`). Si ese día no hubo ninguna, la tarjeta sale sin hora («—») y lo explica.
+- **Media mañana**: a medio camino entre la hora del Desayuno registrado hoy y las 14:30.
+- **Almuerzo**: siempre a las 14:30.
+- **Merienda**: a medio camino entre la hora del Almuerzo registrado hoy y las 20:00.
+- **Cena**: siempre a las 20:00.
+- Si hay dos del mismo tipo en el día, la referencia es la última de ellas.
+- **Con la Cena registrada** toca el Desayuno de **mañana**, contado desde la última ingesta de hoy
+  (así un snack después de cenar lo retrasa). Bajo la hora sale «Mañana».
+- Las cuentas van en minutos UTC, como `minutesOf()`, y `momentOf()` los devuelve a día y hora.
+
+### Historial y Resumen
+
 `renderIntakes()` pinta **las dos** (`renderHistory()` y `renderSummary()`); cuál se ve lo decide el
 CSS, así que el JS no necesita saber en cuál estás. Los botones de cada paginado solo repintan lo
 suyo.
 
-- Cada ingesta tiene **día**, **hora** y **tipo**. El tipo no se escribe: se elige entre cuatro botones
-  —**Desayuno, Almuerzo, Cena, Snack**— que son radios (`.choice__input` + `<label class="choice">`)
+- Cada ingesta tiene **día**, **hora** y **tipo**. El tipo no se escribe: se elige entre seis botones
+  —**Desayuno, Media mañana, Almuerzo, Merienda, Cena, Snack**— que son radios (`.choice__input` + `<label class="choice">`)
   dentro de un `<fieldset class="field choices">`. Al ser radios funcionan sin JavaScript y con
   teclado. La lista está en `INTAKE_TITLES`; `cleanTitle()` rechaza cualquier otro valor.
 - ⚠️ En la interfaz se llama **«Tipo»**, pero por dentro (dato guardado, ids, nombre del grupo de
@@ -218,8 +244,9 @@ suyo.
   uno o al volver a abrir el modal.
 - Los radios **no llevan `required`**: al estar ocultos, el navegador no puede enfocarlos para su
   aviso nativo y se queda sin poder enviar el formulario. De ahí la comprobación a mano.
-- `titleForHour()` (6–11 Desayuno, 12–16 Almuerzo, 20–23 Cena, el resto Snack) ya **solo** se usa al
-  editar una ingesta vieja, para proponerle un tipo. No preselecciona nada en las nuevas.
+- `titleForHour()` (6–9 Desayuno, 10–11 Media mañana, 12–16 Almuerzo, 17–19 Merienda, el resto
+  Cena) ya **solo** se usa al editar una ingesta vieja, para proponerle un tipo. No preselecciona
+  nada en las nuevas. Snack no sale nunca por la hora: solo se elige a mano.
 - `cleanDay()` valida el día igual que `cleanTime()` valida la hora: solo pasa `AAAA-MM-DD` y solo
   si es una fecha real (rechaza, por ejemplo, el 31 de febrero). También filtra lo que se lee de
   `localStorage`.
@@ -232,7 +259,7 @@ suyo.
   en formato `AAAA-MM-DD` (hora local) y `time` en `HH:MM`. En memoria se maneja como array: el
   orden lo pone el repintado, no el almacén.
 - Los días se ordenan del más reciente al más antiguo; dentro de cada día, las ingestas van por
-  hora ascendente. La cabecera del día dice «Hoy», «Ayer» o la fecha completa.
+  hora ascendente. La fecha del día («Hoy», «Ayer» o la fecha completa) va en el paginado.
 - **Se ve un día cada vez**, con el paginado (`#intake-pager`, `js-only`) encima del listado:
   «‹ Anterior» va hacia los días **más antiguos** y «Siguiente ›» hacia los **más recientes**, como
   en un calendario. Los botones solo llevan el chevron (`.btn--icon`); el nombre va en
@@ -266,8 +293,8 @@ suyo.
   `hidden` cuando el modal se abre para dar de alta. `removeIntake()` devuelve si se llegó a borrar,
   para saber si cerrar el modal o quedarse (el `confirm` se puede cancelar).
 - **El modal reparte el ancho a medias**: día y hora comparten línea (`.field-row` con `nowrap` y
-  `flex: 1 1 0`), los cuatro botones de título van de dos en dos (`.choices__row` es un grid de dos
-  columnas) y las acciones son otro grid de dos columnas: Guardar y Cancelar arriba, Eliminar
+  `flex: 1 1 0`), los seis botones de título van de dos en dos (`.choices__row` es un grid de dos
+  columnas; con un número impar, el último ocupa la línea entera) y las acciones son otro grid de dos columnas: Guardar y Cancelar arriba, Eliminar
   ocupando la fila entera debajo (`grid-column: 1 / -1`). Ocultar Eliminar con `hidden` no deja
   hueco: no llega a crear celda.
 - **Dos puertas de entrada al mismo modal** (`<dialog class="modal">`): el botón «+ Añadir ingesta»

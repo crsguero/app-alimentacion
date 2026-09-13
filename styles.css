@@ -623,6 +623,9 @@ html:not(.js) .js-only { display: none; }
   transition: background .15s ease, border-color .15s ease, color .15s ease;
 }
 
+/* Con un número impar de botones, el último ocupa la línea entera */
+.choice:last-of-type:nth-of-type(odd) { grid-column: 1 / -1; }
+
 .choice:hover { border-color: var(--yes); }
 
 .choice__input:checked + .choice {
@@ -916,6 +919,66 @@ html:not(.js) .js-only { display: none; }
 
 
 /* ---------- Ingestas ---------- */
+
+/* Tarjeta de la siguiente ingesta, encima de las subpestañas */
+.next-intake {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 720px;
+  margin-bottom: 20px;
+  padding: 16px 18px;
+  background: var(--yes-bg);
+  border: 1px solid var(--yes);
+  border-radius: var(--radius);
+}
+
+.next-intake__text,
+.next-intake__when {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.next-intake__when {
+  flex: 0 0 auto;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.next-intake__label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: var(--text-soft);
+}
+
+.next-intake__title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.next-intake__note {
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+.next-intake__time {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--yes);
+  font-variant-numeric: tabular-nums;
+}
+
+.next-intake__day {
+  font-size: 13px;
+  color: var(--text-soft);
+}
 
 /* Subpestañas Historial / Resumen: mismo truco que las pestañas grandes.
    ⚠️ Tocar una implica tocar las tres listas de selectores de abajo. */
