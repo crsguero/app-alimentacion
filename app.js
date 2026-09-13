@@ -277,7 +277,9 @@
      Los ids de los alimentos son "grupo/nombre" y la barra separa rutas en la
      base de datos, así que en la clave del nodo se cambia por "~". El id de
      verdad va dentro del registro, que es de donde se lee al volver. */
-  function fbKey(id) { return String(id).replace(/\//g, '~'); }
+  function fbKey(id) { return String(id).replace(/[.#$\/[\]]/g, '~'); }
+
+  /* Solo por si un registro llegara sin `id` dentro: los nuestros lo llevan */
   function idOfKey(key) { return String(key).replace(/~/g, '/'); }
 
   function cloudRec(id, rec) {
@@ -371,7 +373,7 @@
        aunque el websocket llevara horas caído. */
     fdb.ref('.info/connected').on('value', function (snap) {
       fbOnline = !!snap.val();
-      if (fbOnline) { flushOutbox(); }
+      if (fbOnline) { lastError = ''; flushOutbox(); }   // lo de antes ya pasó
       syncStatus();
     });
 
@@ -419,6 +421,7 @@
     flushOutbox();
     markMigrated();
     repaint(key);
+    lastError = '';   // si la nube contesta, el aviso anterior ya no toca
     syncStatus();
   }
 
@@ -1973,7 +1976,7 @@
   }
 
   /* Se queda solo con lo que reconoce y lo valida igual que al cargarlo de
-     localStorage; devuelve null si el archivo no es una copia de la app. */
+     el almacén; devuelve null si el archivo no es una copia de la app. */
   function readBackup(text) {
     var data;
     try { data = JSON.parse(text); } catch (e) { return null; }
