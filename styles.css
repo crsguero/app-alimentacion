@@ -1,0 +1,1455 @@
+/* =========================================================
+   Mis alimentos — HTML + CSS vanilla
+   Navegación por pestañas con radios ocultos (sin JavaScript)
+   ========================================================= */
+
+:root {
+  --bg: #f6f4ef;
+  --surface: #ffffff;
+  --surface-2: #fbfaf7;
+  --sidebar: #1f2a24;
+  --sidebar-soft: #2c3a32;
+  --text: #1e2422;
+  --text-soft: #6b7570;
+  --text-invert: #f3f1ea;
+  --border: #e3e0d8;
+
+  --todo: #8a94a6;
+  --todo-bg: #eef1f5;
+  --yes: #2f8f5b;
+  --yes-bg: #e6f4ec;
+  --no: #c0503f;
+  --no-bg: #fbeae7;
+
+  --radius: 14px;
+  --radius-sm: 10px;
+  --shadow: 0 1px 2px rgba(20, 30, 25, .05), 0 6px 18px rgba(20, 30, 25, .05);
+  --sidebar-w: 260px;
+}
+
+* { box-sizing: border-box; }
+
+/* Necesario: varias clases fijan display y ganarían al atributo hidden */
+[hidden] { display: none !important; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+/* ---------- Layout ---------- */
+
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  min-height: 100vh;
+}
+
+/* Los radios guardan la pestaña activa: invisibles pero enfocables */
+.tab-state {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  margin: 0;
+}
+
+/* ---------- Barra superior y menú de móvil ---------- */
+
+/* En escritorio no hacen falta: la barra lateral siempre está a la vista */
+.topbar,
+.nav-backdrop,
+.menu-close { display: none; }
+
+.menu-btn {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.menu-btn:hover { background: var(--sidebar-soft); }
+
+.menu-btn__icon,
+.menu-btn__icon::before,
+.menu-btn__icon::after {
+  display: block;
+  width: 20px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.menu-btn__icon { position: relative; }
+.menu-btn__icon::before { content: ''; position: absolute; top: -6px; }
+.menu-btn__icon::after  { content: ''; position: absolute; top: 6px; }
+
+/* ---------- Barra lateral ---------- */
+
+.sidebar {
+  grid-column: 1;
+  background: var(--sidebar);
+  color: var(--text-invert);
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px;
+}
+
+.brand__mark {
+  font-size: 26px;
+  line-height: 1;
+  background: var(--sidebar-soft);
+  border-radius: 12px;
+  padding: 8px;
+}
+
+.brand__text { display: flex; flex-direction: column; }
+.brand__text strong { font-size: 16px; letter-spacing: .2px; }
+.brand__text small { color: #a9b5ad; font-size: 12px; }
+
+/* Sección colapsable de la barra lateral */
+
+.nav-group__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .9px;
+  color: #8fa196;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;              /* oculta el triángulo nativo */
+  transition: background .15s ease, color .15s ease;
+}
+
+.nav-group__head::-webkit-details-marker { display: none; }
+
+.nav-group__head:hover { background: var(--sidebar-soft); color: #e6ece8; }
+
+.nav-group__head:focus-visible {
+  outline: 2px solid #8fd4ac;
+  outline-offset: 2px;
+}
+
+.nav-group__head::after {
+  content: '▾';
+  margin-left: auto;
+  font-size: 11px;
+  transition: transform .15s ease;
+}
+
+.nav-group:not([open]) .nav-group__head::after { transform: rotate(-90deg); }
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: var(--radius-sm);
+  color: #cbd5cd;
+  font-size: 15px;
+  cursor: pointer;
+  user-select: none;
+  transition: background .15s ease, color .15s ease;
+}
+
+.nav__item:hover { background: var(--sidebar-soft); color: #fff; }
+.nav__emoji { font-size: 18px; line-height: 1; }
+.nav__label { white-space: nowrap; }
+
+/* Pie de la barra lateral: el botón de ajustes, pegado abajo del todo */
+.sidebar__foot { margin-top: auto; }
+
+.settings-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  font: inherit;
+  font-size: 15px;
+  color: #cbd5cd;
+  background: transparent;
+  border: 1px solid #3a4a41;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+
+.settings-btn:hover { background: var(--sidebar-soft); color: #fff; }
+
+.settings-btn:focus-visible {
+  outline: 2px solid #8fd4ac;
+  outline-offset: 2px;
+}
+
+/* Elementos que solo tienen sentido con JavaScript activo */
+html:not(.js) .js-only { display: none; }
+
+/* ---------- Contenido ---------- */
+
+.content {
+  grid-column: 2;
+  padding: 32px 32px 48px;
+  min-width: 0;
+}
+
+.panel { display: none; }
+
+.panel__head { margin-bottom: 24px; }
+
+.panel__head--row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.panel__head h1 {
+  margin: 0;
+  font-size: clamp(24px, 3vw, 32px);
+  letter-spacing: -.4px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.panel__emoji { font-size: 1.1em; }
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+.column {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow);
+  border-top: 3px solid var(--todo);
+}
+
+.column--todo { border-top-color: var(--todo); }
+.column--yes  { border-top-color: var(--yes); }
+.column--no   { border-top-color: var(--no); }
+
+.column__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.column__head h2 {
+  margin: 0;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: var(--text-soft);
+}
+
+.count {
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 24px;
+  text-align: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--todo-bg);
+  color: var(--todo);
+}
+
+.column--yes .count { background: var(--yes-bg); color: var(--yes); }
+.column--no  .count { background: var(--no-bg);  color: var(--no); }
+
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 13px;
+  font-size: 15px;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+
+.card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(20, 30, 25, .08);
+}
+
+.card__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Acciones de la tarjeta ---------- */
+
+.card__actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+
+
+.card:hover .card__actions,
+.card:focus-within .card__actions { opacity: 1; }
+
+/* En pantallas táctiles no hay hover: siempre visibles */
+@media (hover: none) {
+  .card__actions { opacity: 1; }
+}
+
+.act {
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  filter: grayscale(1);
+  opacity: .55;
+  transition: background .12s ease, opacity .12s ease, filter .12s ease;
+}
+
+.act:hover { background: var(--surface-2); opacity: 1; filter: none; }
+
+.act:focus-visible {
+  outline: 2px solid var(--yes);
+  outline-offset: 1px;
+  opacity: 1;
+  filter: none;
+}
+
+.act--del:hover { background: var(--no-bg); }
+
+/* ---------- Edición en línea ---------- */
+
+.card--editing { padding: 7px 8px; }
+
+.card__input {
+  font: inherit;
+  font-size: 15px;
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--yes);
+  border-radius: 8px;
+}
+
+.card__input:focus { outline: 2px solid var(--yes); outline-offset: 1px; }
+
+/* ---------- Añadir alimento ---------- */
+
+.adder { margin-bottom: 10px; }
+
+.adder__btn {
+  font: inherit;
+  font-size: 14px;
+  width: 100%;
+  padding: 9px 12px;
+  color: var(--text-soft);
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease, border-color .12s ease;
+}
+
+.adder__btn:hover {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--text-soft);
+}
+
+.adder__form { display: flex; gap: 6px; }
+
+.adder__input {
+  font: inherit;
+  font-size: 14px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 10px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.adder__input:focus {
+  outline: none;
+  border-color: var(--yes);
+  box-shadow: 0 0 0 2px var(--yes-bg);
+}
+
+.adder__ok {
+  font: inherit;
+  font-size: 14px;
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  color: #fff;
+  background: var(--yes);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.adder__ok:hover { filter: brightness(1.06); }
+
+/* ---------- Arrastrar y soltar ---------- */
+
+.card[draggable="true"] { cursor: grab; }
+.card--dragging { opacity: .4; cursor: grabbing; }
+
+.column--over {
+  background: var(--todo-bg);
+  border-style: dashed;
+  border-color: var(--todo);
+}
+
+.column--yes.column--over { background: var(--yes-bg); border-color: var(--yes); }
+.column--no.column--over  { background: var(--no-bg);  border-color: var(--no); }
+
+@keyframes flash {
+  from { background: var(--todo-bg); transform: scale(.98); }
+  to   { background: var(--surface); transform: scale(1); }
+}
+
+.card--flash { animation: flash .35s ease; }
+
+/* ---------- Columna vacía ---------- */
+
+.empty {
+  list-style: none;
+  padding: 18px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-soft);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}
+
+/* ---------- Pestaña activa ---------- */
+
+#tab-ingestas:checked     ~ .content #panel-ingestas,
+#tab-recetario:checked    ~ .content #panel-recetario,
+#tab-carne:checked        ~ .content #panel-carne,
+#tab-pescado:checked      ~ .content #panel-pescado,
+#tab-frutas:checked       ~ .content #panel-frutas,
+#tab-verduras:checked     ~ .content #panel-verduras,
+#tab-legumbres:checked    ~ .content #panel-legumbres,
+#tab-cereales:checked     ~ .content #panel-cereales,
+#tab-lacteos:checked      ~ .content #panel-lacteos,
+#tab-huevos:checked       ~ .content #panel-huevos,
+#tab-frutos-secos:checked ~ .content #panel-frutos-secos {
+  display: block;
+}
+
+#tab-ingestas:checked     ~ .sidebar .nav__item[for="tab-ingestas"],
+#tab-recetario:checked    ~ .sidebar .nav__item[for="tab-recetario"],
+#tab-carne:checked        ~ .sidebar .nav__item[for="tab-carne"],
+#tab-pescado:checked      ~ .sidebar .nav__item[for="tab-pescado"],
+#tab-frutas:checked       ~ .sidebar .nav__item[for="tab-frutas"],
+#tab-verduras:checked     ~ .sidebar .nav__item[for="tab-verduras"],
+#tab-legumbres:checked    ~ .sidebar .nav__item[for="tab-legumbres"],
+#tab-cereales:checked     ~ .sidebar .nav__item[for="tab-cereales"],
+#tab-lacteos:checked      ~ .sidebar .nav__item[for="tab-lacteos"],
+#tab-huevos:checked       ~ .sidebar .nav__item[for="tab-huevos"],
+#tab-frutos-secos:checked ~ .sidebar .nav__item[for="tab-frutos-secos"] {
+  background: #fff;
+  color: var(--sidebar);
+  font-weight: 600;
+}
+
+/* Foco visible al navegar con teclado */
+#tab-ingestas:focus-visible     ~ .sidebar .nav__item[for="tab-ingestas"],
+#tab-recetario:focus-visible    ~ .sidebar .nav__item[for="tab-recetario"],
+#tab-carne:focus-visible        ~ .sidebar .nav__item[for="tab-carne"],
+#tab-pescado:focus-visible      ~ .sidebar .nav__item[for="tab-pescado"],
+#tab-frutas:focus-visible       ~ .sidebar .nav__item[for="tab-frutas"],
+#tab-verduras:focus-visible     ~ .sidebar .nav__item[for="tab-verduras"],
+#tab-legumbres:focus-visible    ~ .sidebar .nav__item[for="tab-legumbres"],
+#tab-cereales:focus-visible     ~ .sidebar .nav__item[for="tab-cereales"],
+#tab-lacteos:focus-visible      ~ .sidebar .nav__item[for="tab-lacteos"],
+#tab-huevos:focus-visible       ~ .sidebar .nav__item[for="tab-huevos"],
+#tab-frutos-secos:focus-visible ~ .sidebar .nav__item[for="tab-frutos-secos"] {
+  outline: 2px solid #8fd4ac;
+  outline-offset: 2px;
+}
+
+/* ---------- Recetario ---------- */
+
+#panel-recetario .view { max-width: 1000px; }
+
+.head-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.head-group h1 { min-width: 0; overflow-wrap: anywhere; }
+
+.recipe-box { max-width: 720px; }
+
+.recipe-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+
+.field-row { display: flex; gap: 12px; flex-wrap: wrap; }
+
+.field { display: flex; flex-direction: column; gap: 6px; flex: 1 1 220px; }
+.field--small { flex: 0 1 150px; }
+
+.field__label { font-size: 13px; color: var(--text-soft); }
+
+/* ---------- Elegir entre varias opciones con botones ---------- */
+
+/* El <fieldset> solo agrupa: nada de borde ni relleno propios */
+.choices {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choices > .field__label { padding: 0; }
+
+/* Dos por línea, a medias: los radios van en absoluto y no ocupan celda */
+.choices__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* El radio sigue ahí (y se puede enfocar), pero se ve el botón */
+.choice__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  margin: 0;
+}
+
+.choice {
+  padding: 9px 14px;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.choice:hover { border-color: var(--yes); }
+
+.choice__input:checked + .choice {
+  background: var(--yes);
+  border-color: var(--yes);
+  color: #fff;
+}
+
+.choice__input:focus-visible + .choice {
+  outline: 2px solid var(--yes);
+  outline-offset: 2px;
+}
+
+/* Se ha intentado guardar sin elegir ninguna */
+.choices--error > .field__label { color: var(--no); }
+.choices--error .choice { border-color: var(--no); }
+
+.field input,
+.field textarea {
+  font: inherit;
+  font-size: 15px;
+  width: 100%;
+  padding: 9px 11px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  resize: vertical;
+}
+
+.field input:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--yes);
+  box-shadow: 0 0 0 2px var(--yes-bg);
+}
+
+/* Campo con formato (Preparación) */
+
+.editor {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.editor:focus-within {
+  border-color: var(--yes);
+  box-shadow: 0 0 0 2px var(--yes-bg);
+}
+
+.editor__bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  padding: 6px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.editor__btn {
+  font: inherit;
+  font-size: 13px;
+  min-width: 30px;
+  height: 28px;
+  padding: 0 8px;
+  color: var(--text-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+
+.editor__btn:hover { background: var(--surface); color: var(--text); }
+
+.editor__btn[aria-pressed="true"] {
+  color: var(--yes);
+  background: var(--yes-bg);
+  border-color: var(--yes);
+}
+
+.editor__btn:focus-visible { outline: 2px solid var(--yes); outline-offset: 1px; }
+
+.editor__sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 5px;
+  background: var(--border);
+}
+
+.editor__area {
+  min-height: 130px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-size: 15px;
+}
+
+.editor__area:focus { outline: none; }
+
+.editor__area:empty::before,
+.editor__area.is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-soft);
+  pointer-events: none;
+}
+
+.editor__area p { margin: 0 0 8px; }
+.editor__area ul,
+.editor__area ol { margin: 0 0 8px; padding-left: 22px; }
+
+.form-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.btn {
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 16px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: filter .12s ease, background .12s ease;
+}
+
+.btn:hover { background: var(--surface-2); }
+
+.btn--primary {
+  color: #fff;
+  background: var(--yes);
+  border-color: var(--yes);
+}
+
+.btn--primary:hover { filter: brightness(1.06); background: var(--yes); }
+
+.btn--ghost {
+  font-size: 18px;
+  line-height: 1;
+  padding: 8px 12px;
+  color: var(--text-soft);
+  background: transparent;
+}
+
+.btn--ghost:hover { color: var(--text); background: var(--surface); }
+
+/* Eliminar: en rojo para que no se pulse por inercia */
+.btn--danger {
+  color: var(--no);
+  border-color: var(--no);
+}
+
+.btn--danger:hover { color: #fff; background: var(--no); }
+
+.recipe-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Fila del listado: solo el nombre, toda la fila es pulsable */
+
+.recipe-row { display: block; }
+
+.recipe-row__btn {
+  font: inherit;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 14px 18px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+
+.recipe-row__btn:hover {
+  transform: translateY(-1px);
+  border-color: var(--yes);
+  box-shadow: 0 4px 12px rgba(20, 30, 25, .08);
+}
+
+.recipe-row__btn:focus-visible { outline: 2px solid var(--yes); outline-offset: 2px; }
+
+.recipe-row__name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+
+.recipe-row__time {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--yes-bg);
+  color: var(--yes);
+  white-space: nowrap;
+}
+
+.recipe-row__chevron {
+  flex: 0 0 auto;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-soft);
+}
+
+/* Pantalla de detalle */
+
+.recipe-detail {
+  max-width: 760px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 24px;
+  box-shadow: var(--shadow);
+}
+
+.recipe__meta {
+  display: inline-block;
+  margin: 0 0 18px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--yes-bg);
+  color: var(--yes);
+}
+
+.recipe__section {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .7px;
+  color: var(--text-soft);
+}
+
+.recipe__section:not(:first-child) { margin-top: 20px; }
+.recipe__meta + .recipe__section { margin-top: 0; }
+
+.recipe__ing {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 15px;
+}
+
+.recipe__ing li { margin-bottom: 3px; }
+
+.recipe__steps {
+  margin: 0;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.recipe__steps p { margin: 0 0 8px; }
+.recipe__steps ul,
+.recipe__steps ol { margin: 0 0 8px; padding-left: 22px; }
+.recipe__steps li { margin-bottom: 3px; }
+.recipe__steps > *:last-child { margin-bottom: 0; }
+
+.recipe-empty {
+  list-style: none;
+  margin: 0;
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--text-soft);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+
+/* ---------- Ingestas ---------- */
+
+/* Subpestañas Historial / Resumen: mismo truco que las pestañas grandes.
+   ⚠️ Tocar una implica tocar las tres listas de selectores de abajo. */
+
+.subtabs {
+  display: flex;
+  gap: 4px;
+  max-width: 720px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.subtab {
+  padding: 9px 14px;
+  margin-bottom: -1px;
+  font-size: 15px;
+  color: var(--text-soft);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  user-select: none;
+  transition: color .15s ease, border-color .15s ease;
+}
+
+.subtab:hover { color: var(--text); }
+
+.intake-view { display: none; }
+
+#intake-view-historial:checked ~ #intake-historial,
+#intake-view-resumen:checked  ~ #intake-resumen { display: block; }
+
+#intake-view-historial:checked ~ .subtabs .subtab[for="intake-view-historial"],
+#intake-view-resumen:checked  ~ .subtabs .subtab[for="intake-view-resumen"] {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--yes);
+}
+
+#intake-view-historial:focus-visible ~ .subtabs .subtab[for="intake-view-historial"],
+#intake-view-resumen:focus-visible  ~ .subtabs .subtab[for="intake-view-resumen"] {
+  outline: 2px solid var(--yes);
+  outline-offset: 2px;
+}
+
+/* Paginado: un día cada vez, con los botones a los lados */
+.intake-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 720px;
+  margin-bottom: 18px;
+}
+
+.intake-pager__pos {
+  font-size: 13px;
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.btn:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+.btn:disabled:hover { background: var(--surface); }
+
+.intake-days {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 720px;
+}
+
+.intake-day__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.intake-day__head h2 {
+  margin: 0;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: var(--text-soft);
+}
+
+.intake-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Resumen: una tarjeta por día, con el total de ingestas */
+
+.summary { max-width: 720px; }
+
+.summary-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 15px;
+  box-shadow: var(--shadow);
+}
+
+.summary-row__day { min-width: 0; overflow-wrap: anywhere; }
+
+/* Fila del registro: toda ella es pulsable y abre el modal de edición */
+
+.intake-row { display: block; }
+
+.intake-row__btn {
+  font: inherit;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+
+.intake-row__btn:hover {
+  transform: translateY(-1px);
+  border-color: var(--yes);
+  box-shadow: 0 4px 12px rgba(20, 30, 25, .08);
+}
+
+.intake-row__btn:focus-visible { outline: 2px solid var(--yes); outline-offset: 2px; }
+
+.intake-row__time {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--yes-bg);
+  color: var(--yes);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Título arriba y, debajo, el tiempo desde la ingesta anterior */
+.intake-row__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.intake-row__title { overflow-wrap: anywhere; }
+
+.intake-row__gap {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+/* ---------- Botón flotante y modal ---------- */
+
+.fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 20;
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font: inherit;
+  color: #fff;
+  background: var(--yes);
+  border: none;
+  border-radius: 50%;
+  box-shadow: 0 6px 18px rgba(20, 30, 25, .28);
+  cursor: pointer;
+  transition: transform .12s ease, filter .12s ease;
+}
+
+.fab:hover { transform: translateY(-2px); filter: brightness(1.06); }
+.fab:active { transform: translateY(0); }
+.fab:focus-visible { outline: 3px solid var(--yes); outline-offset: 3px; }
+
+.fab__icon { font-size: 30px; line-height: 1; margin-top: -2px; }
+
+/* Con el FAB flotando, el contenido necesita aire abajo */
+html.js .content { padding-bottom: 96px; }
+
+.modal {
+  width: min(420px, calc(100vw - 32px));
+  padding: 0;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 48px rgba(20, 30, 25, .28);
+}
+
+/* Respaldo por si el navegador no entiende <dialog> */
+.modal:not([open]) { display: none; }
+
+.modal::backdrop { background: rgba(20, 30, 25, .45); }
+
+.modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 10px 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal__title { margin: 0; font-size: 17px; }
+
+.modal__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+}
+
+/* Aquí los campos se apilan: el 220px de .field sería alto, no ancho */
+.modal__form > .field { flex: 0 0 auto; }
+
+/* Día y hora comparten línea, a medias: sin envolver y sin el 220px de base */
+.modal__form .field-row { flex-wrap: nowrap; }
+.modal__form .field-row > .field { flex: 1 1 0; min-width: 0; }
+
+/* Guardar y Cancelar a medias; Eliminar, una fila entera debajo.
+   Separados de los campos: estos 18 px más los 14 del gap del formulario son 32. */
+.modal__form .form-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.modal__form .form-actions .btn--danger { grid-column: 1 / -1; }
+
+/* El modal de ajustes no es un formulario: mismo hueco, sin campos */
+.modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 18px;
+}
+
+.settings-block { display: flex; flex-direction: column; gap: 8px; }
+
+.settings-block__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-block__note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+/* El botón ocupa el ancho del bloque: lo estira el flex de .settings-block */
+.settings-block__btn { margin-top: 4px; }
+
+/* Se abre desde el botón de importar: el selector nativo desentona */
+.settings-file { display: none; }
+
+.settings-msg {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--yes);
+}
+
+.settings-msg:empty { display: none; }
+.settings-msg--bad { color: var(--no); }
+
+.settings-value { color: var(--text); }
+
+/* ---------- Sesión: pantalla de carga y login ----------
+   Mientras se comprueba la sesión, <html> lleva `auth-pending`; si no hay
+   ninguna, `auth-out`. Sin JavaScript no se añade ninguna de las dos: los
+   tableros se ven como siempre y estas pantallas se quedan escondidas. */
+
+.auth-gate {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  place-items: center;
+  padding: 20px;
+  background: var(--bg);
+}
+
+html.auth-pending .app,
+html.auth-out .app { display: none; }
+
+html.auth-pending .auth-gate--loading { display: grid; }
+html.auth-out .auth-gate--login { display: grid; }
+
+.auth-spinner {
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--border);
+  border-top-color: var(--yes);
+  border-radius: 50%;
+  animation: auth-spin .8s linear infinite;
+}
+
+@keyframes auth-spin { to { transform: rotate(360deg); } }
+
+.auth-card {
+  width: 100%;
+  max-width: 340px;
+  padding: 26px 22px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.auth-card__title { margin: 0 0 4px; font-size: 19px; }
+
+.auth-card__note {
+  margin: 0 0 18px;
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+.auth-card .field { margin-bottom: 12px; }
+.auth-card__btn { width: 100%; margin-top: 6px; }
+
+.auth-error {
+  margin: 12px 0 0;
+  min-height: 1em;
+  font-size: 13px;
+  color: var(--no);
+}
+
+/* Aviso de sincronización: flota arriba, sin robarle sitio al contenido */
+.sync-note {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  max-width: min(520px, calc(100vw - 24px));
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 13px;
+  text-align: center;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+}
+
+.sync-note--bad {
+  color: var(--no);
+  background: var(--no-bg);
+  border-color: var(--no);
+}
+
+/* ---------- Responsive ---------- */
+
+/* Tablet: la barra lateral se estrecha */
+@media (max-width: 1080px) {
+  :root { --sidebar-w: 210px; }
+  .content { padding: 28px 24px 40px; }
+  .board { gap: 14px; }
+  .nav__item { padding: 10px; font-size: 14px; }
+}
+
+/* Móvil / tablet vertical: la barra lateral se esconde tras el botón de menú */
+@media (max-width: 860px) {
+  /* La barra superior ocupa lo justo; el contenido se queda el resto.
+     Sin esto el grid reparte el alto sobrante entre las dos filas. */
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  /* Barra superior fija con el botón de menú */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    grid-column: 1;
+    padding: 8px 12px;
+    background: var(--sidebar);
+    color: var(--text-invert);
+    position: sticky;
+    top: 0;
+    z-index: 15;
+  }
+
+  .topbar__title { font-size: 16px; font-weight: 600; letter-spacing: .2px; }
+
+  /* El foco del teclado se ve sobre el botón, no sobre la casilla oculta */
+  #nav-toggle:focus-visible ~ .topbar .menu-btn {
+    outline: 2px solid #8fd4ac;
+    outline-offset: 2px;
+  }
+
+  /* La barra lateral pasa a ser un cajón que entra desde la izquierda */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 40;
+    width: min(82vw, 320px);
+    height: 100vh;
+    height: 100dvh;
+    padding: 20px 14px;
+    gap: 18px;
+    transform: translateX(-100%);
+    transition: transform .2s ease;
+    box-shadow: 0 0 40px rgba(20, 30, 25, .35);
+  }
+
+  #nav-toggle:checked ~ .sidebar { transform: none; }
+
+  /* Fondo oscuro mientras el cajón está abierto */
+  .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: rgba(20, 30, 25, .45);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .2s ease, visibility .2s ease;
+  }
+
+  #nav-toggle:checked ~ .nav-backdrop { opacity: 1; visibility: visible; }
+
+  /* Con el cajón abierto, el fondo no se desplaza */
+  body:has(#nav-toggle:checked) { overflow: hidden; }
+
+  /* Aspa para cerrar, dentro del propio cajón */
+  .menu-close {
+    display: grid;
+    place-items: center;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-sm);
+    color: #cbd5cd;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .menu-close:hover { background: var(--sidebar-soft); color: #fff; }
+
+  .brand { padding-right: 40px; }
+
+  .content { grid-column: 1; padding: 20px 16px 40px; }
+}
+
+/* Móvil: las tres columnas se apilan */
+@media (max-width: 680px) {
+  .board { grid-template-columns: 1fr; gap: 12px; }
+  .panel__head--row { align-items: flex-start; }
+  .recipe-detail { padding: 18px; }
+  .panel__head { margin-bottom: 18px; }
+  .fab { right: 16px; bottom: 16px; }
+}
+
+/* ---------- Modo oscuro ---------- */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141a17;
+    --surface: #1e2622;
+    --surface-2: #1a221e;
+    --sidebar: #101613;
+    --sidebar-soft: #1d2621;
+    --text: #e8ece9;
+    --text-soft: #97a49c;
+    --border: #2b352f;
+
+    --todo-bg: #232c33;
+    --yes: #58bd85;
+    --yes-bg: #1c2f24;
+    --no: #e07a67;
+    --no-bg: #33211d;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  }
+
+  .card:hover,
+  .intake-row__btn:hover { box-shadow: 0 4px 12px rgba(0, 0, 0, .35); }
+
+  .fab { box-shadow: 0 6px 18px rgba(0, 0, 0, .45); }
+  .modal { box-shadow: 0 18px 48px rgba(0, 0, 0, .55); }
+  .modal::backdrop { background: rgba(0, 0, 0, .6); }
+
+  #tab-ingestas:checked     ~ .sidebar .nav__item[for="tab-ingestas"],
+  #tab-recetario:checked    ~ .sidebar .nav__item[for="tab-recetario"],
+  #tab-carne:checked        ~ .sidebar .nav__item[for="tab-carne"],
+  #tab-pescado:checked      ~ .sidebar .nav__item[for="tab-pescado"],
+  #tab-frutas:checked       ~ .sidebar .nav__item[for="tab-frutas"],
+  #tab-verduras:checked     ~ .sidebar .nav__item[for="tab-verduras"],
+  #tab-legumbres:checked    ~ .sidebar .nav__item[for="tab-legumbres"],
+  #tab-cereales:checked     ~ .sidebar .nav__item[for="tab-cereales"],
+  #tab-lacteos:checked      ~ .sidebar .nav__item[for="tab-lacteos"],
+  #tab-huevos:checked       ~ .sidebar .nav__item[for="tab-huevos"],
+  #tab-frutos-secos:checked ~ .sidebar .nav__item[for="tab-frutos-secos"] {
+    background: #2f8f5b;
+    color: #fff;
+  }
+}
+
+/* ---------- Impresión y accesibilidad ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

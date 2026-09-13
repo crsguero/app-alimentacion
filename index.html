@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Alimentación</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="apple-touch-icon" href="favicon.svg">
+  <link rel="stylesheet" href="styles.css">
+  <!-- `auth-pending` tapa la app mientras se comprueba la sesión. Sin JS no se
+       añade ninguna de las dos clases: la lista de alimentos se ve igual. -->
+  <script>document.documentElement.classList.add('js', 'auth-pending');</script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+
+<!-- Aviso de sincronización: solo aparece si hay algo que contar -->
+<p class="sync-note js-only" id="sync-note" role="status" hidden></p>
+
+<!-- Comprobando si hay sesión -->
+<div class="auth-gate auth-gate--loading">
+  <span class="auth-spinner" aria-label="Cargando"></span>
+</div>
+
+<!-- Sin sesión: entrar con email y contraseña -->
+<div class="auth-gate auth-gate--login">
+  <div class="auth-card">
+    <h1 class="auth-card__title">🍽️ Mis alimentos</h1>
+    <p class="auth-card__note">Inicia sesión para sincronizar tus datos.</p>
+
+    <form id="login-form">
+      <div class="field">
+        <label class="field__label" for="login-email">Email</label>
+        <input type="email" id="login-email" placeholder="tu@email.com" autocomplete="email" required>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="login-password">Contraseña</label>
+        <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" required>
+      </div>
+
+      <button class="btn btn--primary auth-card__btn" type="submit">Entrar</button>
+      <p class="auth-error" id="login-error" role="alert"></p>
+    </form>
+  </div>
+</div>
+
+<div class="app">
+
+  <!-- Estado de la navegación: un radio por pestaña -->
+  <input class="tab-state" type="radio" name="grupo" id="tab-ingestas">
+  <input class="tab-state" type="radio" name="grupo" id="tab-recetario">
+  <input class="tab-state" type="radio" name="grupo" id="tab-carne" checked>
+  <input class="tab-state" type="radio" name="grupo" id="tab-pescado">
+  <input class="tab-state" type="radio" name="grupo" id="tab-frutas">
+  <input class="tab-state" type="radio" name="grupo" id="tab-verduras">
+  <input class="tab-state" type="radio" name="grupo" id="tab-legumbres">
+  <input class="tab-state" type="radio" name="grupo" id="tab-cereales">
+  <input class="tab-state" type="radio" name="grupo" id="tab-lacteos">
+  <input class="tab-state" type="radio" name="grupo" id="tab-huevos">
+  <input class="tab-state" type="radio" name="grupo" id="tab-frutos-secos">
+
+  <!-- Estado del menú lateral en móvil: abierto o cerrado -->
+  <input class="tab-state" type="checkbox" id="nav-toggle" aria-label="Menú">
+
+  <!-- Barra superior: solo se ve en móvil -->
+  <header class="topbar">
+    <label class="menu-btn" for="nav-toggle" aria-label="Abrir el menú" title="Menú">
+      <span class="menu-btn__icon" aria-hidden="true"></span>
+    </label>
+    <span class="topbar__title">🍽️ Mis alimentos</span>
+  </header>
+
+  <!-- Fondo oscuro: al tocarlo se cierra el menú -->
+  <label class="nav-backdrop" for="nav-toggle" aria-hidden="true"></label>
+
+  <aside class="sidebar">
+    <label class="menu-close" for="nav-toggle" aria-label="Cerrar el menú" title="Cerrar">✕</label>
+
+    <div class="brand">
+      <span class="brand__mark">🍽️</span>
+      <span class="brand__text">
+        <strong>Mis alimentos</strong>
+        <small>Qué he probado y qué me gusta</small>
+      </span>
+    </div>
+
+    <details class="nav-group" id="nav-alimentacion" open>
+      <summary class="nav-group__head">Alimentación</summary>
+      <nav class="nav" aria-label="Alimentación">
+        <label class="nav__item" for="tab-ingestas"><span class="nav__emoji">🥣</span><span class="nav__label">Ingestas</span></label>
+      </nav>
+    </details>
+
+    <details class="nav-group" id="nav-recetas" open>
+      <summary class="nav-group__head">Recetas</summary>
+      <nav class="nav" aria-label="Recetas">
+        <label class="nav__item" for="tab-recetario"><span class="nav__emoji">📖</span><span class="nav__label">Recetario</span></label>
+      </nav>
+    </details>
+
+    <details class="nav-group" id="nav-alimentos" open>
+      <summary class="nav-group__head">Alimentos</summary>
+      <nav class="nav" aria-label="Grupos de alimentos">
+        <label class="nav__item" for="tab-carne"><span class="nav__emoji">🥩</span><span class="nav__label">Carne</span></label>
+        <label class="nav__item" for="tab-pescado"><span class="nav__emoji">🐟</span><span class="nav__label">Pescado y marisco</span></label>
+        <label class="nav__item" for="tab-frutas"><span class="nav__emoji">🍎</span><span class="nav__label">Frutas</span></label>
+        <label class="nav__item" for="tab-verduras"><span class="nav__emoji">🥦</span><span class="nav__label">Verduras</span></label>
+        <label class="nav__item" for="tab-legumbres"><span class="nav__emoji">🫘</span><span class="nav__label">Legumbres</span></label>
+        <label class="nav__item" for="tab-cereales"><span class="nav__emoji">🌾</span><span class="nav__label">Cereales y pasta</span></label>
+        <label class="nav__item" for="tab-lacteos"><span class="nav__emoji">🧀</span><span class="nav__label">Lácteos</span></label>
+        <label class="nav__item" for="tab-huevos"><span class="nav__emoji">🥚</span><span class="nav__label">Huevos</span></label>
+        <label class="nav__item" for="tab-frutos-secos"><span class="nav__emoji">🥜</span><span class="nav__label">Frutos secos</span></label>
+      </nav>
+    </details>
+
+    <div class="sidebar__foot">
+      <button class="settings-btn js-only" type="button" id="settings-open">
+        <span class="nav__emoji" aria-hidden="true">⚙️</span><span class="nav__label">Ajustes</span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="content">
+
+    <!-- INGESTAS -->
+    <section class="panel" id="panel-ingestas">
+      <header class="panel__head panel__head--row">
+        <h1><span class="panel__emoji">🥣</span> Ingestas</h1>
+        <button class="btn btn--primary js-only" type="button" id="intake-new">+ Añadir ingesta</button>
+      </header>
+
+      <!-- Estado de la subpestaña: historial o resumen -->
+      <input class="tab-state" type="radio" name="intake-view" id="intake-view-historial" checked>
+      <input class="tab-state" type="radio" name="intake-view" id="intake-view-resumen">
+
+      <div class="subtabs js-only">
+        <label class="subtab" for="intake-view-historial">Historial</label>
+        <label class="subtab" for="intake-view-resumen">Resumen</label>
+      </div>
+
+      <section class="intake-view" id="intake-historial">
+        <nav class="intake-pager js-only" id="intake-pager" aria-label="Días registrados" hidden>
+          <button class="btn" type="button" id="intake-prev">‹ Anterior</button>
+          <span class="intake-pager__pos" id="intake-pos" aria-live="polite"></span>
+          <button class="btn" type="button" id="intake-next">Siguiente ›</button>
+        </nav>
+
+        <div class="intake-days" id="intake-days"></div>
+      </section>
+
+      <section class="intake-view" id="intake-resumen">
+        <nav class="intake-pager js-only" id="summary-pager" aria-label="Semanas registradas" hidden>
+          <button class="btn" type="button" id="summary-prev">‹ Anterior</button>
+          <span class="intake-pager__pos" id="summary-pos" aria-live="polite"></span>
+          <button class="btn" type="button" id="summary-next">Siguiente ›</button>
+        </nav>
+
+        <div class="summary" id="summary"></div>
+      </section>
+    </section>
+
+    <!-- RECETARIO -->
+    <section class="panel" id="panel-recetario">
+      <!-- Pantalla: listado -->
+      <section class="view" id="view-list">
+        <header class="panel__head panel__head--row">
+          <h1><span class="panel__emoji">📖</span> Recetario</h1>
+          <button class="btn btn--primary js-only" type="button" id="recipe-new">+ Añadir receta</button>
+        </header>
+
+        <ul class="recipe-list" id="recipe-list"></ul>
+      </section>
+
+      <!-- Pantalla: detalle de una receta -->
+      <section class="view" id="view-detail" hidden>
+        <header class="panel__head panel__head--row">
+          <div class="head-group">
+            <button class="btn btn--ghost" type="button" data-back aria-label="Volver al listado">←</button>
+            <h1 id="detail-title"></h1>
+          </div>
+          <div class="head-group">
+            <button class="btn" type="button" id="detail-edit">✏️ Editar</button>
+            <button class="btn" type="button" id="detail-duplicate">⧉ Duplicar</button>
+            <button class="btn" type="button" id="detail-delete">🗑️ Eliminar</button>
+          </div>
+        </header>
+
+        <div class="recipe-detail" id="recipe-detail"></div>
+      </section>
+
+      <!-- Pantalla: formulario -->
+      <section class="view" id="view-form" hidden>
+        <header class="panel__head panel__head--row">
+          <div class="head-group">
+            <button class="btn btn--ghost" type="button" data-back aria-label="Volver">←</button>
+            <h1 id="recipe-form-title">Nueva receta</h1>
+          </div>
+        </header>
+
+        <div class="recipe-box">
+          <form class="recipe-form" id="recipe-form">
+            <div class="field-row">
+              <label class="field">
+                <span class="field__label">Nombre</span>
+                <input type="text" id="recipe-name" maxlength="80" placeholder="Lentejas de la abuela" required>
+              </label>
+              <label class="field field--small">
+                <span class="field__label">Tiempo</span>
+                <input type="text" id="recipe-time" maxlength="20" placeholder="45 min">
+              </label>
+            </div>
+
+            <label class="field">
+              <span class="field__label">Ingredientes</span>
+              <textarea id="recipe-ingredients" rows="4" placeholder="Uno por línea"></textarea>
+            </label>
+
+            <div class="field">
+              <span class="field__label" id="recipe-steps-label">Preparación</span>
+              <div class="editor">
+                <div class="editor__bar" role="toolbar" aria-label="Formato del texto">
+                  <button class="editor__btn" type="button" data-cmd="bold" title="Negrita" aria-label="Negrita"><b>B</b></button>
+                  <button class="editor__btn" type="button" data-cmd="italic" title="Cursiva" aria-label="Cursiva"><i>I</i></button>
+                  <button class="editor__btn" type="button" data-cmd="underline" title="Subrayado" aria-label="Subrayado"><u>U</u></button>
+                  <span class="editor__sep"></span>
+                  <button class="editor__btn" type="button" data-cmd="insertUnorderedList" title="Lista con viñetas" aria-label="Lista con viñetas">• —</button>
+                  <button class="editor__btn" type="button" data-cmd="insertOrderedList" title="Lista numerada" aria-label="Lista numerada">1. —</button>
+                  <span class="editor__sep"></span>
+                  <button class="editor__btn" type="button" data-cmd="removeFormat" title="Quitar formato" aria-label="Quitar formato">✕</button>
+                </div>
+                <div class="editor__area" id="recipe-steps" contenteditable="true" role="textbox"
+                     aria-multiline="true" aria-labelledby="recipe-steps-label" data-placeholder="Pasos a seguir"></div>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button class="btn btn--primary" type="submit">Guardar receta</button>
+              <button class="btn" type="button" id="recipe-cancel">Cancelar</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </section>
+
+    <!-- CARNE -->
+    <section class="panel" id="panel-carne">
+      <header class="panel__head">
+        <h1><span class="panel__emoji">🥩</span> Carne</h1>
+      </header>
+      <div class="board">
+        <section class="column column--todo">
+          <header class="column__head"><h2>Sin probar</h2><span class="count">4</span></header>
+          <ul class="cards">
+            <li class="card">Pato</li>
+            <li class="card">Cordero</li>
+            <li class="card">Conejo</li>
+            <li class="card">Codorniz</li>
+          </ul>
+        </section>
+        <section class="column column--yes">
+          <header class="column__head"><h2>Me gusta</h2><span class="count">4</span></header>
+          <ul class="cards">
+            <li class="card">Pollo</li>
+            <li class="card">Ternera</li>
+            <li class="card">Bacon</li>
+            <li class="card">Pavo</li>
+          </ul>
+        </section>
+        <section class="column column--no">
+          <header class="column__head"><h2>No me gusta</h2><span class="count">2</span></header>
+          <ul class="cards">
+            <li class="card">Hígado</li>
+            <li class="card">Callos</li>
+          </ul>
+        </section>
+      </div>
+    </section>
+
+    <!-- PESCADO Y MARISCO -->
+    <section class="panel" id="panel-pescado">
+      <header class="panel__head">
+        <h1><span class="panel__emoji">🐟</span> Pescado y marisco</h1>
+      </header>
+      <div class="board">
+        <section class="column column--todo">
+          <header class="column__head"><h2>Sin probar</h2><span class="count">4</span></header>
+          <ul class="cards">
+            <li class="card">Calamar</li>
+            <li class="card">Bogavante</li>
+            <li class="card">Pulpo</li>
+            <li class="card">Berberechos</li>
+          </ul>
+        </section>
+        <section class="column column--yes">
+          <header class="column__head"><h2>Me gusta</h2><span class="count">4</span></header>
+          <ul class="cards">
+            <li class="card">Salmón</li>
+            <li class="card">Merluza</li>
+            <li class="card">Gambas</li>
+            <li class="card">Atún</li>
+          </ul>
+        </section>
+        <section class="column column--no">
+          <header class="column__head"><h2>No me gusta</h2><span class="count">2</span></header>
+          <ul class="cards">
+            <li class="card">Sardinas</li>
+            <li class="card">Ostras</li>
+          </ul>
+        </section>
+      </div>
+    </section>
+
+    <!-- FRUTAS -->
+    <section class="panel" id="panel-frutas">
+      <header class="panel__head">
+        <h1><span class="panel__emoji">🍎</span> Frutas</h1>
+      </header>
+      <div class="board">
+        <section class="column column--todo">
+          <header class="column__head"><h2>Sin probar</h2><span class="count">5</span></header>
+          <ul class="cards">
+            <li class="card">Mango</li>
+            <li class="card">Kiwi</li>
+            <li class="card">Papaya</li>
+            <li class="card">Arándanos</li>
+            <li class="card">Nectarina</li>
+          </ul>
+        </section>
+        <section class="column column--yes">
+          <header class="column__head"><h2>Me gusta</h2><span class="count">5</span></header>
+          <ul class="cards">
+            <li class="card">Fresas</li>
+            <li class="card">Plátano</li>
+            <li class="card">Naranja</li>
+            <li class="card">Sandía</li>
+            <li class="card">Uvas</li>
+          </ul>
+        </section>
+        <section class="column column--no">
+          <header class="column__head"><h2>No me gusta</h2><span class="count">2</span></header>
+          <ul class="cards">
+            <li class="card">Pera</li>
+            <li class="card">Pomelo</li>
+          </ul>
+        </section>
+      </div>
+    </section>
+
+    <!-- VERDURAS -->
+    <section class="panel" id="panel-verduras">
+      <header class="panel__head">
+        <h1><span class="panel__emoji">🥦</span> Verduras y hortalizas</h1>
+      </header>
+      <div class="board">
+        <section class="column column--todo">
+          <header class="column__head"><h2>Sin probar</h2><span class="count">4</span></header>
+          <ul class="cards">
+            <li class="card">Kale</li>
+            <li class="card">Acelgas</li>
+            <li class="card">Calabacín</li>
+            <li class="card">Boniato</li>
+          </ul>
+        </section>
+        <section class="column column--yes">
+          <header class="column__head"><h2>Me gusta</h2><span class="count">4</span></header>
+          <ul class="cards">
+            <li class="card">Zanahoria</li>
+            <li class="card">Tomate</li>
+            <li class="card">Patata</li>
+            <li class="card">Maíz</li>
+          </ul>
+        </section>
+        <section class="column column--no">
+          <header class="column__head"><h2>No me gusta</h2><span class="count">3</span></header>
+          <ul class="cards">
+            <li class="card">Brócoli</li>
+            <li class="card">Cebolla cruda</li>
+            <li class="card">Berenjena</li>
+          </ul>
+        </section>
+      </div>
+    </section>
+
+    <!-- LEGUMBRES -->
+    <section class="panel" id="panel-legumbres">
+      <header class="panel__head">
+        <h1><span class="panel__emoji">🫘</span> Legumbres</h1>
+      </header>
+      <div class="board">
+        <section class="column column--todo">
+          <header class="column__head"><h2>Sin probar</h2><span class="count">4</span></header>
+          <ul class="cards">
+            <li class="card">Alubias pintas</li>
+            <li class="card">Soja</li>
+            <li class="card">Edamame</li>
+            <li class="card">Tofu</li>
+          </ul>
+        </section>
+        <section class="column column--yes">
+          <header class="column__head"><h2>Me gusta</h2><span class="count">3</span></header>
+          <ul class="cards">
+            <li class="card">Garbanzos</li>
+            <li class="card">Lentejas</li>
+            <li class="card">Guisantes</li>
+          </ul>
+        </section>
+        <section class="column column--no">
+          <header class="column__head"><h2>No me gusta</h2><span class="count">1</span></header>
+          <ul class="cards">
+            <li class="card">Habas</li>
+          </ul>
+        </section>
+      </div>
+    </section>
+
+    <!-- CEREALES Y PASTA -->
+    <section class="panel" id="panel-cereales">
+      <header class="panel__head">
+        <h1><span class="panel__emoji">🌾</span> Cereales y pasta</h1>
+      </header>
+      <div class="board">
+        <section class="column column--todo">
+          <header class="column__head"><h2>Sin probar</h2><span class="count">4</span></header>
+          <ul class="cards">
+            <li class="card">Quinoa</li>
+            <li class="card">Bulgur</li>
+            <li class="card">Fideos soba</li>
+            <li class="card">Espelta</li>
+          </ul>
+        </section>
+        <section class="column column--yes">
+          <header class="column__head"><h2>Me gusta</h2><span class="count">4</span></header>
+          <ul class="cards">
+            <li class="card">Pasta</li>
+            <li class="card">Arroz</li>
+            <li class="card">Pan integral</li>
+            <li class="card">Avena</li>
+          </ul>
+        </section>
+        <section class="column column--no">
+          <header class="column__head"><h2>No me gusta</h2><span class="count">1</span></header>
+          <ul class="cards">
+            <li class="card">Cuscús</li>
+          </ul>
+        </section>
+      </div>
+    </section>
+
+    <!-- LÁCTEOS -->
+    <section class="panel" id="panel-lacteos">
+      <header class="panel__head">
+        <h1><span class="panel__emoji">🧀</span> Lácteos</h1>
+      </header>
+      <div class="board">
+        <section class="column column--todo">
+          <header class="column__head"><h2>Sin probar</h2><span class="count">3</span></header>
+          <ul class="cards">
+            <li class="card">Queso azul</li>
+            <li class="card">Kéfir</li>
+            <li class="card">Requesón</li>
+          </ul>
+        </section>
+        <section class="column column--yes">
+          <header class="column__head"><h2>Me gusta</h2><span class="count">4</span></header>
+          <ul class="cards">
+            <li class="card">Leche</li>
+            <li class="card">Yogur natural</li>
+            <li class="card">Queso curado</li>
+            <li class="card">Mantequilla</li>
+          </ul>
+        </section>
+        <section class="column column--no">
+          <header class="column__head"><h2>No me gusta</h2><span class="count">2</span></header>
+          <ul class="cards">
+            <li class="card">Queso de cabra</li>
+            <li class="card">Leche condensada</li>
+          </ul>
+        </section>
+      </div>
+    </section>
+
+    <!-- HUEVOS -->
+    <section class="panel" id="panel-huevos">
+      <header class="panel__head">
+        <h1><span class="panel__emoji">🥚</span> Huevos</h1>
+      </header>
+      <div class="board">
+        <section class="column column--todo">
+          <header class="column__head"><h2>Sin probar</h2><span class="count">3</span></header>
+          <ul class="cards">
+            <li class="card">Huevo escalfado</li>
+            <li class="card">Huevo poché</li>
+            <li class="card">Huevo de codorniz</li>
+          </ul>
+        </section>
+        <section class="column column--yes">
+          <header class="column__head"><h2>Me gusta</h2><span class="count">3</span></header>
+          <ul class="cards">
+            <li class="card">Huevo frito</li>
+            <li class="card">Tortilla francesa</li>
+            <li class="card">Tortilla de patatas</li>
+          </ul>
+        </section>
+        <section class="column column--no">
+          <header class="column__head"><h2>No me gusta</h2><span class="count">1</span></header>
+          <ul class="cards">
+            <li class="card">Huevo cocido</li>
+          </ul>
+        </section>
+      </div>
+    </section>
+
+    <!-- FRUTOS SECOS -->
+    <section class="panel" id="panel-frutos-secos">
+      <header class="panel__head">
+        <h1><span class="panel__emoji">🥜</span> Frutos secos</h1>
+      </header>
+      <div class="board">
+        <section class="column column--todo">
+          <header class="column__head"><h2>Sin probar</h2><span class="count">4</span></header>
+          <ul class="cards">
+            <li class="card">Anacardos</li>
+            <li class="card">Pistachos</li>
+            <li class="card">Pipas de girasol</li>
+            <li class="card">Pipas de calabaza</li>
+          </ul>
+        </section>
+        <section class="column column--yes">
+          <header class="column__head"><h2>Me gusta</h2><span class="count">3</span></header>
+          <ul class="cards">
+            <li class="card">Almendras</li>
+            <li class="card">Cacahuetes</li>
+            <li class="card">Nueces</li>
+          </ul>
+        </section>
+        <section class="column column--no">
+          <header class="column__head"><h2>No me gusta</h2><span class="count">1</span></header>
+          <ul class="cards">
+            <li class="card">Avellanas</li>
+          </ul>
+        </section>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Botón flotante: registrar una ingesta desde cualquier pestaña -->
+  <button class="fab js-only" type="button" id="intake-fab" title="Añadir ingesta" aria-label="Añadir ingesta">
+    <span class="fab__icon" aria-hidden="true">+</span>
+  </button>
+
+  <dialog class="modal" id="intake-modal" aria-labelledby="intake-modal-title">
+    <header class="modal__head">
+      <h2 class="modal__title" id="intake-modal-title">Nueva ingesta</h2>
+      <button class="btn btn--ghost" type="button" id="intake-modal-close" aria-label="Cerrar">✕</button>
+    </header>
+
+    <form class="modal__form" id="intake-modal-form">
+      <div class="field-row">
+        <label class="field">
+          <span class="field__label">Día</span>
+          <input type="date" id="intake-modal-date" required>
+        </label>
+        <label class="field">
+          <span class="field__label">Hora</span>
+          <input type="time" id="intake-modal-time" required>
+        </label>
+      </div>
+      <fieldset class="field choices" id="intake-modal-type">
+        <legend class="field__label">Tipo</legend>
+        <div class="choices__row">
+          <input class="choice__input" type="radio" name="intake-modal-title" id="intake-modal-title-desayuno" value="Desayuno" checked>
+          <label class="choice" for="intake-modal-title-desayuno">Desayuno</label>
+          <input class="choice__input" type="radio" name="intake-modal-title" id="intake-modal-title-almuerzo" value="Almuerzo">
+          <label class="choice" for="intake-modal-title-almuerzo">Almuerzo</label>
+          <input class="choice__input" type="radio" name="intake-modal-title" id="intake-modal-title-cena" value="Cena">
+          <label class="choice" for="intake-modal-title-cena">Cena</label>
+          <input class="choice__input" type="radio" name="intake-modal-title" id="intake-modal-title-snack" value="Snack">
+          <label class="choice" for="intake-modal-title-snack">Snack</label>
+        </div>
+      </fieldset>
+      <div class="form-actions">
+        <button class="btn" type="button" id="intake-modal-cancel">Cancelar</button>
+        <button class="btn btn--primary" type="submit">Guardar</button>
+        <button class="btn btn--danger" type="button" id="intake-modal-delete" hidden>🗑️ Eliminar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Ajustes: copia de seguridad de todo lo guardado -->
+  <dialog class="modal" id="settings-modal" aria-labelledby="settings-modal-title">
+    <header class="modal__head">
+      <h2 class="modal__title" id="settings-modal-title">Ajustes</h2>
+      <button class="btn btn--ghost" type="button" id="settings-close" aria-label="Cerrar">✕</button>
+    </header>
+
+    <div class="modal__body">
+      <section class="settings-block">
+        <h3 class="settings-block__title">Sesión</h3>
+        <p class="settings-block__note">
+          Cuenta: <span class="settings-value" id="settings-email">—</span><br>
+          <span class="settings-value" id="settings-sync"></span>
+        </p>
+        <button class="btn settings-block__btn" type="button" id="settings-logout">Cerrar sesión</button>
+      </section>
+
+      <section class="settings-block">
+        <h3 class="settings-block__title">Copia de seguridad</h3>
+        <p class="settings-block__note">
+          Descarga en un archivo los alimentos, las recetas y las ingestas. Los datos ya se
+          sincronizan solos entre dispositivos: esto es una copia aparte, por si acaso.
+        </p>
+        <button class="btn btn--primary settings-block__btn" type="button" id="settings-export">⬇️ Exportar datos</button>
+      </section>
+
+      <section class="settings-block">
+        <h3 class="settings-block__title">Restaurar</h3>
+        <p class="settings-block__note">
+          Carga un archivo exportado antes. Sustituye lo que haya guardado ahora mismo —aquí y en
+          la nube—; se pide confirmación.
+        </p>
+        <button class="btn settings-block__btn" type="button" id="settings-import">⬆️ Importar datos</button>
+        <input class="settings-file" type="file" id="settings-file" accept="application/json,.json">
+      </section>
+
+      <p class="settings-msg" id="settings-msg" role="status"></p>
+    </div>
+  </dialog>
+</div>
+
+<!-- Firebase: la nube compartida con las demás apps. Al ser scripts normales,
+     se ejecutan antes que app.js, que está aplazado (defer). -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+
+</body>
+</html>
