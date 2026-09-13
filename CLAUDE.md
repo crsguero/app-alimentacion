@@ -84,8 +84,8 @@ memoria, en IndexedDB y en la nube.
   puede llenar. Se pinta con el respaldo local al instante y luego manda la nube.
 - ⚠️ **El orden importa**: primero se lee IndexedDB y se pinta, y solo después se engancha la nube.
   Al revés, el primer snapshot se llevaría por delante lo que hubiera guardado en el aparato.
-- En `localStorage` solo quedan las **preferencias de este navegador**: `misAlimentos.tab` y
-  `misAlimentos.nav.*`. No son datos y no se sincronizan.
+- En `localStorage` solo quedan las **preferencias de este navegador**: `misAlimentos.nav.*`.
+  No son datos y no se sincronizan. (La vieja `misAlimentos.tab` ya no se lee ni se escribe.)
 - **Migración**: la primera vez se vuelca lo que hubiera en las claves viejas de `localStorage`
   (`misAlimentos.v2`, `misAlimentos.v1`, `.recetas.v1`, `.ingestas.v1`) y se marca `local-movido`.
   ⚠️ Sin esa marca, vaciar las recetas las traería de vuelta al recargar. Las claves viejas no se
@@ -142,11 +142,11 @@ nativos. Su estado abierto/cerrado se guarda en `misAlimentos.nav.<id>`.
 Al pie de la barra lateral, pegado abajo con `margin-top: auto` en `.sidebar__foot`, va el botón
 **⚙️ Ajustes** (`#settings-open`, `js-only`). No es una pestaña: abre un modal (ver «Ajustes»).
 
-**La pestaña activa se recuerda** en `misAlimentos.tab` (el id del radio). `keepTabState()` es lo
-primero que hace `init()`, para no enseñar la pestaña equivocada antes de corregirla. Sin JS —o sin
-nada guardado— se abre en Carne, que es la que lleva `checked` en el HTML. Ojo: marcar un radio
-desde código no dispara `change`, así que quien lo haga debe llamar también a `saveTab()`
-(lo hace `showIntakesTab()`, el salto a Ingestas al guardar desde el FAB).
+**La app siempre aterriza en Ingestas**, por decisión expresa: la pestaña activa ya no se recuerda
+entre recargas. Lo primero que hace `init()` es `showIntakesTab()` (la misma función que salta a
+Ingestas al guardar desde el FAB), para no enseñar otra pestaña antes. ⚠️ En el HTML **sigue
+marcada Carne** a propósito: sin JS se abre ahí y se ve la lista de alimentos, en vez de un panel de
+ingestas vacío.
 
 ### Menú de móvil
 
@@ -234,9 +234,15 @@ suyo.
 - Los días se ordenan del más reciente al más antiguo; dentro de cada día, las ingestas van por
   hora ascendente. La cabecera del día dice «Hoy», «Ayer» o la fecha completa.
 - **Se ve un día cada vez**, con el paginado (`#intake-pager`, `js-only`) encima del listado:
-  «‹ Anterior» va hacia los días más recientes y «Siguiente ›» hacia los más antiguos, como en
-  cualquier paginado, porque la página 1 es el día más reciente. En medio, la posición («2 de 7»),
-  con `aria-live` para que se anuncie al cambiar. Con un solo día el paginado se oculta.
+  «‹ Anterior» va hacia los días **más antiguos** y «Siguiente ›» hacia los **más recientes**, como
+  en un calendario. Los botones solo llevan el chevron (`.btn--icon`); el nombre va en
+  `aria-label` y `title` (por dentro `iu.keys` va del más reciente al más antiguo, así que Anterior suma
+  1 al índice). En medio, `#intake-pos` (con `aria-live`) pinta la **fecha** del día y, debajo,
+  **cuántas ingestas** tiene («3 ingestas»). El listado ya no lleva cabecera con fecha y contador:
+  eso vive solo en el paginado. Por eso el paginado se ve **aunque haya un solo día**, con los dos
+  botones desactivados. El paginado del Resumen va en el mismo sentido y con los mismos
+  botones, pero en medio pone la posición («2 de 7»), **contada desde la semana más antigua** para
+  que ‹ reste y › sume; la última es la más reciente.
 - El día que se está viendo se guarda en `iu.day` (la **clave del día**, no un índice: así aguanta
   altas y bajas) y la lista de días en `iu.keys`. Si el día que se veía desaparece, se cae al más
   reciente. Al guardar un alta o una edición, `iu.day` salta al día de lo que se acaba de tocar,
@@ -327,7 +333,7 @@ de la app en un archivo**.
   como `AbortError`: eso **no** es un fallo y no debe disparar la descarga de respaldo.
 - Como exportar puede tardar lo que la usuaria tarde en elegir carpeta, el mensaje de resultado lo
   pone `exportData()` por dentro, no quien escucha el clic.
-- `misAlimentos.tab` y `misAlimentos.nav.*` **no se exportan**: son preferencias de este navegador,
+- `misAlimentos.nav.*` **no se exporta**: son preferencias de este navegador,
   no datos.
 - **Importar** pasa por un `<input type="file">` oculto (`.settings-file`) que dispara el botón.
   `readBackup()` exige la marca `app: 'misAlimentos'` y **revalida todo** como si viniera del
@@ -354,6 +360,6 @@ de la app en un archivo**.
   también.
 - Los datos **se sincronizan solos** entre el portátil y el móvil, y entre la versión local y la
   online: son el mismo nodo de la nube. Lo que sigue siendo de cada navegador son las preferencias
-  (pestaña activa y secciones abiertas) y el respaldo local de IndexedDB.
+  (secciones abiertas de la barra lateral) y el respaldo local de IndexedDB.
 - El Exportar/Importar de **Ajustes** ya no es la única forma de llevarse los datos, pero se queda
   como copia de seguridad aparte.

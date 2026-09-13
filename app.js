@@ -12,7 +12,6 @@
 
   /* Preferencias de este navegador: no son datos, no se sincronizan */
   var NAV_KEY = 'misAlimentos.nav';
-  var TAB_KEY = 'misAlimentos.tab';
 
   /* Claves del viejo localStorage: solo se leen una vez, al migrar */
   var LS_FOODS = 'misAlimentos.v2';
@@ -1501,28 +1500,15 @@
     return li;
   }
 
-  function buildIntakeDay(key, list, gaps) {
+  /* La fecha y el número de ingestas no van aquí: los pone el paginado */
+  function buildIntakeDay(list, gaps) {
     var section = document.createElement('section');
     section.className = 'intake-day';
-
-    var head = document.createElement('header');
-    head.className = 'intake-day__head';
-
-    var title = document.createElement('h2');
-    title.textContent = dayLabel(key);
-
-    var count = document.createElement('span');
-    count.className = 'count';
-    count.textContent = list.length;
-
-    head.appendChild(title);
-    head.appendChild(count);
 
     var ul = document.createElement('ul');
     ul.className = 'intake-list';
     list.forEach(function (intake) { ul.appendChild(buildIntakeRow(intake, gaps[intake.id])); });
 
-    section.appendChild(head);
     section.appendChild(ul);
     return section;
   }
@@ -1579,17 +1565,32 @@
     if (index === -1) { index = 0; }
     iu.day = iu.keys[index];
 
-    renderIntakePager(index);
-    iu.days.appendChild(buildIntakeDay(iu.day, days[iu.day], gaps));
+    renderIntakePager(index, days[iu.day].length);
+    iu.days.appendChild(buildIntakeDay(days[iu.day], gaps));
   }
 
-  function renderIntakePager(index) {
+  /* En medio, la fecha del día y, debajo, cuántas ingestas tiene. Se ve aunque
+     haya un solo día, porque es donde está la fecha; entonces sin botones activos */
+  function renderIntakePager(index, total) {
     if (!iu.pager) { return; }
 
-    iu.pager.hidden = iu.keys.length < 2;    // con un solo día no hay nada que paginar
-    iu.pos.textContent = (index + 1) + ' de ' + iu.keys.length;
-    iu.prev.disabled = index === 0;
-    iu.next.disabled = index >= iu.keys.length - 1;
+    iu.pager.hidden = false;
+    iu.pos.textContent = '';
+
+    var date = document.createElement('span');
+    date.className = 'intake-pager__date';
+    date.textContent = dayLabel(iu.day);
+
+    var count = document.createElement('span');
+    count.className = 'intake-pager__count';
+    count.textContent = total + (total === 1 ? ' ingesta' : ' ingestas');
+
+    iu.pos.appendChild(date);
+    iu.pos.appendChild(count);
+
+    /* Los días van del más reciente (índice 0) al más antiguo */
+    iu.prev.disabled = index >= iu.keys.length - 1;
+    iu.next.disabled = index === 0;
   }
 
   /* -1 va hacia los días más recientes; +1, hacia los más antiguos */
@@ -1681,9 +1682,11 @@
     if (!iu.summaryPager) { return; }
 
     iu.summaryPager.hidden = iu.weeks.length < 2;
-    iu.summaryPos.textContent = (index + 1) + ' de ' + iu.weeks.length;
-    iu.summaryPrev.disabled = index === 0;
-    iu.summaryNext.disabled = index >= iu.weeks.length - 1;
+    /* Las semanas van de la más reciente (índice 0) a la más antigua, pero la
+       posición se cuenta desde la más antigua, para que ‹ reste y › sume */
+    iu.summaryPos.textContent = (iu.weeks.length - index) + ' de ' + iu.weeks.length;
+    iu.summaryPrev.disabled = index >= iu.weeks.length - 1;
+    iu.summaryNext.disabled = index === 0;
   }
 
   function goToWeek(step) {
@@ -1757,12 +1760,10 @@
     repaintPending();            // lo que llegó de la nube con el modal abierto
   }
 
-  /* Al guardar desde el FAB se salta a Ingestas para ver el registro */
+  /* Al arrancar, y al guardar desde el FAB para ver el registro */
   function showIntakesTab() {
     var tab = document.getElementById('tab-ingestas');
-    if (!tab) { return; }
-    tab.checked = true;          // marcarlo por código no dispara 'change'
-    saveTab(tab.id);
+    if (tab) { tab.checked = true; }
   }
 
   /* Sin tipo no se guarda: se marca el campo en rojo y se lleva el foco al primero.
@@ -1828,8 +1829,9 @@
     iu.next = document.getElementById('intake-next');
 
     if (iu.pager) {
-      iu.prev.addEventListener('click', function () { goToDay(-1); });
-      iu.next.addEventListener('click', function () { goToDay(1); });
+      /* Anterior lleva a días más antiguos; Siguiente, a más recientes */
+      iu.prev.addEventListener('click', function () { goToDay(1); });
+      iu.next.addEventListener('click', function () { goToDay(-1); });
     }
 
     /* Resumen: una semana cada vez, también de la más reciente hacia atrás */
@@ -1840,8 +1842,9 @@
     iu.summaryNext = document.getElementById('summary-next');
 
     if (iu.summaryPager) {
-      iu.summaryPrev.addEventListener('click', function () { goToWeek(-1); });
-      iu.summaryNext.addEventListener('click', function () { goToWeek(1); });
+      /* Igual que en el historial: Anterior, más antiguas; Siguiente, más recientes */
+      iu.summaryPrev.addEventListener('click', function () { goToWeek(1); });
+      iu.summaryNext.addEventListener('click', function () { goToWeek(-1); });
     }
 
     intakes = loadIntakes();
@@ -2219,28 +2222,6 @@
     render();
   }
 
-  /* Recuerda en qué pestaña estabas: al recargar se vuelve a ella */
-  function saveTab(id) {
-    try { localStorage.setItem(TAB_KEY, id); } catch (e) { /* nada que hacer */ }
-  }
-
-  function keepTabState() {
-    var saved = null;
-
-    try { saved = localStorage.getItem(TAB_KEY); } catch (e) { /* se queda la del HTML */ }
-
-    if (saved) {
-      var tab = document.getElementById(saved);
-      if (tab && tab.type === 'radio' && tab.classList.contains('tab-state')) { tab.checked = true; }
-    }
-
-    document.querySelectorAll('input.tab-state[type="radio"]').forEach(function (radio) {
-      radio.addEventListener('change', function () {
-        if (radio.checked) { saveTab(radio.id); }
-      });
-    });
-  }
-
   /* Recuerda qué secciones de la barra lateral quedaron abiertas */
   function keepNavGroupState() {
     document.querySelectorAll('.nav-group[id]').forEach(function (group) {
@@ -2271,7 +2252,9 @@
   }
 
   function init() {
-    keepTabState();              // lo primero, para no enseñar la pestaña equivocada
+    /* La app siempre aterriza en Ingestas, y lo primero, para no enseñar otra
+       pestaña antes. En el HTML sigue marcada Carne: sin JS se ve la lista de alimentos */
+    showIntakesTab();
     collectSeeds();
     build(loadData());
     render();
