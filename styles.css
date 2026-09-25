@@ -499,6 +499,9 @@ html:not(.js) .js-only { display: none; }
 /* ---------- Pestaña activa ---------- */
 
 #tab-ingestas:checked     ~ .content #panel-ingestas,
+#tab-menu:checked         ~ .content #panel-menu,
+#tab-menu-alimentos:checked ~ .content #panel-menu-alimentos,
+#tab-mejoras:checked      ~ .content #panel-mejoras,
 #tab-recetario:checked    ~ .content #panel-recetario,
 #tab-carne:checked        ~ .content #panel-carne,
 #tab-pescado:checked      ~ .content #panel-pescado,
@@ -508,11 +511,17 @@ html:not(.js) .js-only { display: none; }
 #tab-cereales:checked     ~ .content #panel-cereales,
 #tab-lacteos:checked      ~ .content #panel-lacteos,
 #tab-huevos:checked       ~ .content #panel-huevos,
-#tab-frutos-secos:checked ~ .content #panel-frutos-secos {
+#tab-frutos-secos:checked ~ .content #panel-frutos-secos,
+#tab-semillas:checked     ~ .content #panel-semillas,
+#tab-especias:checked     ~ .content #panel-especias,
+#tab-otros:checked        ~ .content #panel-otros {
   display: block;
 }
 
 #tab-ingestas:checked     ~ .sidebar .nav__item[for="tab-ingestas"],
+#tab-menu:checked         ~ .sidebar .nav__item[for="tab-menu"],
+#tab-menu-alimentos:checked ~ .sidebar .nav__item[for="tab-menu-alimentos"],
+#tab-mejoras:checked      ~ .sidebar .nav__item[for="tab-mejoras"],
 #tab-recetario:checked    ~ .sidebar .nav__item[for="tab-recetario"],
 #tab-carne:checked        ~ .sidebar .nav__item[for="tab-carne"],
 #tab-pescado:checked      ~ .sidebar .nav__item[for="tab-pescado"],
@@ -522,7 +531,10 @@ html:not(.js) .js-only { display: none; }
 #tab-cereales:checked     ~ .sidebar .nav__item[for="tab-cereales"],
 #tab-lacteos:checked      ~ .sidebar .nav__item[for="tab-lacteos"],
 #tab-huevos:checked       ~ .sidebar .nav__item[for="tab-huevos"],
-#tab-frutos-secos:checked ~ .sidebar .nav__item[for="tab-frutos-secos"] {
+#tab-frutos-secos:checked ~ .sidebar .nav__item[for="tab-frutos-secos"],
+#tab-semillas:checked     ~ .sidebar .nav__item[for="tab-semillas"],
+#tab-especias:checked     ~ .sidebar .nav__item[for="tab-especias"],
+#tab-otros:checked        ~ .sidebar .nav__item[for="tab-otros"] {
   background: #fff;
   color: var(--sidebar);
   font-weight: 600;
@@ -530,6 +542,9 @@ html:not(.js) .js-only { display: none; }
 
 /* Foco visible al navegar con teclado */
 #tab-ingestas:focus-visible     ~ .sidebar .nav__item[for="tab-ingestas"],
+#tab-menu:focus-visible         ~ .sidebar .nav__item[for="tab-menu"],
+#tab-menu-alimentos:focus-visible ~ .sidebar .nav__item[for="tab-menu-alimentos"],
+#tab-mejoras:focus-visible      ~ .sidebar .nav__item[for="tab-mejoras"],
 #tab-recetario:focus-visible    ~ .sidebar .nav__item[for="tab-recetario"],
 #tab-carne:focus-visible        ~ .sidebar .nav__item[for="tab-carne"],
 #tab-pescado:focus-visible      ~ .sidebar .nav__item[for="tab-pescado"],
@@ -539,9 +554,529 @@ html:not(.js) .js-only { display: none; }
 #tab-cereales:focus-visible     ~ .sidebar .nav__item[for="tab-cereales"],
 #tab-lacteos:focus-visible      ~ .sidebar .nav__item[for="tab-lacteos"],
 #tab-huevos:focus-visible       ~ .sidebar .nav__item[for="tab-huevos"],
-#tab-frutos-secos:focus-visible ~ .sidebar .nav__item[for="tab-frutos-secos"] {
+#tab-frutos-secos:focus-visible ~ .sidebar .nav__item[for="tab-frutos-secos"],
+#tab-semillas:focus-visible     ~ .sidebar .nav__item[for="tab-semillas"],
+#tab-especias:focus-visible     ~ .sidebar .nav__item[for="tab-especias"],
+#tab-otros:focus-visible        ~ .sidebar .nav__item[for="tab-otros"] {
   outline: 2px solid #8fd4ac;
   outline-offset: 2px;
+}
+
+/* ---------- Menú de la semana ---------- */
+
+/* El panel se estira y la tabla se queda con todo el alto que sobra.
+   Va después de la lista de arriba para ganarle el display: block. */
+#tab-menu:checked ~ .content #panel-menu {
+  display: flex;
+  flex-direction: column;
+}
+
+#panel-menu { height: 100%; }
+
+/* Pestaña «Alimentos»: una tarjeta por grupo, cuatro por fila */
+.menu-groups {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  align-content: start;
+}
+
+.menu-group {
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+
+.menu-group__title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.menu-group__emoji { flex: 0 0 auto; font-size: 1.1em; }
+
+.menu-group__list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.menu-group__list li { overflow-wrap: anywhere; }
+
+/* ---------- Pestaña «Mejoras»: tablero de tareas ----------
+   Clases propias a propósito: `.board`, `.column` y `.card` son las de los
+   alimentos, y las mira `collectSeeds()` y el arrastrar y soltar global. */
+
+/* Dos vistas del mismo tablero, con las subpestañas arriba a la derecha de la
+   cabecera. ⚠️ Añadir una obliga a tocar las tres listas de selectores. */
+.subtabs--head {
+  max-width: none;
+  margin-bottom: 0;
+  border-bottom: 0;
+}
+
+.tasks-view { display: none; }
+
+#tasks-view-ingesta:checked   ~ #tasks-por-ingesta,
+#tasks-view-alimentos:checked ~ #tasks-por-alimentos { display: block; }
+
+#tasks-view-ingesta:checked   ~ .panel__head .subtab[for="tasks-view-ingesta"],
+#tasks-view-alimentos:checked ~ .panel__head .subtab[for="tasks-view-alimentos"] {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--yes);
+}
+
+#tasks-view-ingesta:focus-visible   ~ .panel__head .subtab[for="tasks-view-ingesta"],
+#tasks-view-alimentos:focus-visible ~ .panel__head .subtab[for="tasks-view-alimentos"] {
+  outline: 2px solid var(--yes);
+  outline-offset: 2px;
+}
+
+/* Los dos tableros van igual: todas las columnas en **la misma fila**, de
+   250 px para arriba, y si no caben se desplaza en horizontal. */
+.tasks-board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(250px, 1fr);
+  gap: 12px;
+  align-items: start;
+  overflow-x: auto;
+  padding-bottom: 8px;      /* sitio para la barra de desplazamiento */
+}
+
+/* Las columnas de ingesta van en verde; General, en gris */
+.tasks-col {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--yes);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.tasks-col--general { border-top-color: var(--text-soft); }
+
+.tasks-col--over {
+  background: var(--yes-bg);
+  border-color: var(--yes);
+  border-style: dashed;
+}
+
+.tasks-col--general.tasks-col--over {
+  background: var(--surface);
+  border-color: var(--text-soft);
+}
+
+.tasks-col .count { background: var(--yes-bg); color: var(--yes); }
+
+.tasks-col--general .count {
+  background: var(--surface);
+  color: var(--text-soft);
+}
+
+.tasks-col__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tasks-col__head h2 {
+  margin: 0;
+  min-width: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}
+
+.tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  min-height: 12px;      /* sitio para soltar en una columna vacía */
+  list-style: none;
+}
+
+.task-row { display: block; }
+.task-row[draggable="true"] { cursor: grab; }
+.task-row--dragging { opacity: .4; cursor: grabbing; }
+.task-row--dragging .task-card { cursor: grabbing; }
+
+/* Dónde va a caer, igual que en el menú */
+.task-row--drop .task-card { box-shadow: inset 0 3px 0 var(--yes); }
+.task-row--drop-end .task-card { box-shadow: inset 0 -3px 0 var(--yes); }
+
+/* La tarjeta entera es un botón: abre la ficha. Solo lleva el título; la
+   ingesta ya la dice la columna y las notas se leen dentro. */
+.task-card {
+  display: block;
+  width: 100%;
+  padding: 9px 10px;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  /* WebKit no arrastra los controles de formulario por su cuenta */
+  -webkit-user-drag: element;
+}
+
+.task-card:hover { border-color: var(--yes); }
+.task-card:focus-visible { outline: 2px solid var(--yes); outline-offset: 1px; }
+
+.task-card__title { display: block; }
+
+.task-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+/* Los grupos de alimentos, en pastillas debajo del título. General se queda
+   en gris; los grupos de alimentos van en verde. */
+.task-chip {
+  display: inline-block;
+  max-width: 100%;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--text-soft);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.task-chip--food {
+  color: var(--text);
+  background: var(--yes-bg);
+  border-color: var(--yes);
+}
+
+/* El botón de alta va debajo de la lista, como en Trello */
+.adder--task { margin: 10px 0 0; }
+
+/* Se pinta como rejilla, no como tabla: así las siete columnas y las cinco
+   filas se reparten el ancho y el alto en partes iguales (una tabla normal
+   reparte el alto sobrante a ojo, en proporción al contenido de cada fila).
+   La semántica de tabla, que se pierde al cambiar el display, la reponen
+   los role= del HTML. */
+.menu-week {
+  flex: 1 1 auto;
+  min-height: 320px;
+  display: grid;
+  grid-template-rows: auto repeat(5, minmax(0, 1fr));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.menu-week thead,
+.menu-week tbody { display: contents; }
+
+.menu-week tr {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  min-height: 0;
+}
+
+.menu-week th,
+.menu-week td {
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  padding: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* La celda la rellena .menu-cell, que necesita el alto entero */
+.menu-week td { padding: 0; }
+
+.menu-week th:first-child,
+.menu-week td:first-child { border-left: 0; }
+
+.menu-week thead th {
+  border-top: 0;
+  background: var(--surface-2);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-soft);
+  text-align: center;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Dentro de la celda: arriba el título de la fila y el +, y debajo las
+   recetas. El contenido de una celda llena no la estira: la lista se queda con
+   su barra de desplazamiento. */
+.menu-cell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 4px;
+}
+
+.menu-cell__head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.menu-cell__title {
+  min-width: 0;
+  padding-left: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-cell__list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+/* Solo el signo: ni borde ni fondo, que en una celda pequeña pesaban mucho.
+   Escondido hasta que el ratón pasa por su celda; con `opacity` y no con
+   `visibility` para que siga alcanzándose con el tabulador, y sin quitarlo del
+   flujo para que la cabecera no baile al aparecer. */
+.menu-add {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  font: inherit;
+  font-size: 17px;
+  line-height: 1;
+  color: var(--text-soft);
+  background: none;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity .12s ease;
+}
+
+.menu-cell:hover .menu-add,
+.menu-cell:focus-within .menu-add { opacity: 1; }
+
+/* Sin ratón no hay hover: en el móvil se ve siempre */
+@media (hover: none) {
+  .menu-add { opacity: 1; }
+}
+
+.menu-add:hover { color: var(--yes); }
+
+.menu-add:focus-visible {
+  color: var(--yes);
+  outline: 2px solid var(--yes);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+/* La receta se arrastra de celda en celda; el botón de dentro sigue abriéndola */
+.menu-row[draggable="true"] { cursor: grab; }
+.menu-row--dragging { opacity: .4; cursor: grabbing; }
+.menu-row--dragging .menu-item { cursor: grabbing; }
+
+.menu-cell--over {
+  background: var(--yes-bg);
+  outline: 2px dashed var(--yes);
+  outline-offset: -2px;
+}
+
+/* Dónde va a caer: una raya encima de la receta que quedaría debajo, o debajo
+   de la última si va al final */
+.menu-row--drop .menu-item { box-shadow: inset 0 3px 0 var(--yes); }
+.menu-row--drop-end .menu-item { box-shadow: inset 0 -3px 0 var(--yes); }
+
+.menu-item {
+  display: block;
+  width: 100%;
+  padding: 4px 6px;
+  font: inherit;
+  /* Toda la receta es un botón, y WebKit no arrastra los controles de
+     formulario por su cuenta: sin esto, en Safari no se movería ninguna */
+  -webkit-user-drag: element;
+  text-align: left;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.menu-item:hover { border-color: var(--yes); }
+.menu-item:focus-visible { outline: 2px solid var(--yes); outline-offset: 1px; }
+
+/* Tipo de receta. «Variable» es el estilo de arriba, el normal. */
+
+/* «Fijo»: en verde, como la tarjeta de Siguiente ingesta */
+.menu-item--fijo {
+  background: var(--yes-bg);
+  border-color: var(--yes);
+}
+
+/* «Borrador»: apagado, como si estuviera deshabilitado */
+.menu-item--borrador {
+  color: var(--text-soft);
+  background: none;
+  border-style: dashed;
+  opacity: .75;
+}
+
+.menu-item--borrador:hover { opacity: 1; }
+
+.menu-item__name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* En móvil no caben los nombres enteros: se recortan con puntos suspensivos */
+@media (max-width: 860px) {
+  .menu-week th { padding: 6px 4px; }
+
+  .menu-week thead th {
+    font-size: 11px;
+    letter-spacing: -.2px;
+  }
+
+  /* Cuatro tarjetas por fila no caben: de dos en dos */
+  .menu-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+
+  .menu-cell { padding: 2px; }
+  .menu-cell__head { margin-bottom: 2px; }
+  .menu-cell__title { font-size: 9px; letter-spacing: .2px; }
+  .menu-add { width: 18px; height: 18px; font-size: 15px; }
+  .menu-item { padding: 3px 4px; }
+  .menu-item__name { font-size: 12px; }
+}
+
+/* ---------- Elegir alimentos (modal del menú) ---------- */
+
+/* Los elegidos, todos juntos arriba: en la lista de casillas cuesta verlos,
+   sobre todo repartidos entre varios grupos o con el buscador puesto. */
+.picker__chosen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 96px;
+  overflow: auto;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--yes-bg);
+  border: 1px solid var(--yes);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.chip:hover { background: var(--surface-2); border-color: var(--no); }
+.chip:focus-visible { outline: 2px solid var(--yes); outline-offset: 1px; }
+.chip__x { font-size: 11px; color: var(--text-soft); }
+.chip:hover .chip__x { color: var(--no); }
+
+/* Lo ya elegido se distingue también en la lista de abajo */
+.picker__opt:has(input:checked) { background: var(--yes-bg); }
+
+.picker__list {
+  max-height: 34vh;
+  padding: 6px;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+/* La de los grupos de una mejora es corta: no hace falta tanto alto */
+.picker__list--short { max-height: 24vh; }
+
+.picker__group + .picker__group { margin-top: 10px; }
+
+.picker__group-title {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.picker__opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  font-size: 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.picker__opt:hover { background: var(--surface-2); }
+
+/* La casilla la pinta el navegador: solo se le cambia el color y el tamaño.
+   El selector lleva [type] a propósito: si no, gana el `.field input` de los
+   campos de texto (ancho completo, relleno y borde) y la deforma. */
+.picker__opt input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  accent-color: var(--yes);
+}
+
+.picker__empty,
+.picker__none {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-soft);
 }
 
 /* ---------- Recetario ---------- */
@@ -644,6 +1179,7 @@ html:not(.js) .js-only { display: none; }
 .choices--error .choice { border-color: var(--no); }
 
 .field input,
+.field select,
 .field textarea {
   font: inherit;
   font-size: 15px;
@@ -657,6 +1193,7 @@ html:not(.js) .js-only { display: none; }
 }
 
 .field input:focus,
+.field select:focus,
 .field textarea:focus {
   outline: none;
   border-color: var(--yes);
@@ -1263,6 +1800,8 @@ html.js .content { padding-bottom: 96px; }
   margin-top: 18px;
 }
 
+/* Duplicar y Eliminar ocupan la fila entera, debajo de Guardar y Cancelar */
+.modal__form .form-actions .btn--wide,
 .modal__form .form-actions .btn--danger { grid-column: 1 / -1; }
 
 /* El modal de ajustes no es un formulario: mismo hueco, sin campos */
@@ -1495,6 +2034,7 @@ html.auth-out .auth-gate--login { display: grid; }
 /* Móvil: las tres columnas se apilan */
 @media (max-width: 680px) {
   .board { grid-template-columns: 1fr; gap: 12px; }
+  .menu-groups { grid-template-columns: 1fr; }
   .panel__head--row { align-items: flex-start; }
   .recipe-detail { padding: 18px; }
   .panel__head { margin-bottom: 18px; }
@@ -1530,6 +2070,9 @@ html.auth-out .auth-gate--login { display: grid; }
   .modal::backdrop { background: rgba(0, 0, 0, .6); }
 
   #tab-ingestas:checked     ~ .sidebar .nav__item[for="tab-ingestas"],
+  #tab-menu:checked         ~ .sidebar .nav__item[for="tab-menu"],
+  #tab-menu-alimentos:checked ~ .sidebar .nav__item[for="tab-menu-alimentos"],
+  #tab-mejoras:checked      ~ .sidebar .nav__item[for="tab-mejoras"],
   #tab-recetario:checked    ~ .sidebar .nav__item[for="tab-recetario"],
   #tab-carne:checked        ~ .sidebar .nav__item[for="tab-carne"],
   #tab-pescado:checked      ~ .sidebar .nav__item[for="tab-pescado"],
@@ -1539,7 +2082,10 @@ html.auth-out .auth-gate--login { display: grid; }
   #tab-cereales:checked     ~ .sidebar .nav__item[for="tab-cereales"],
   #tab-lacteos:checked      ~ .sidebar .nav__item[for="tab-lacteos"],
   #tab-huevos:checked       ~ .sidebar .nav__item[for="tab-huevos"],
-  #tab-frutos-secos:checked ~ .sidebar .nav__item[for="tab-frutos-secos"] {
+  #tab-frutos-secos:checked ~ .sidebar .nav__item[for="tab-frutos-secos"],
+  #tab-semillas:checked     ~ .sidebar .nav__item[for="tab-semillas"],
+  #tab-especias:checked     ~ .sidebar .nav__item[for="tab-especias"],
+  #tab-otros:checked        ~ .sidebar .nav__item[for="tab-otros"] {
     background: #2f8f5b;
     color: #fff;
   }

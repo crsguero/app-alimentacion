@@ -74,9 +74,9 @@ que se ejecutan **antes** que `app.js`, que va con `defer`.
   en modo local con lo que haya en IndexedDB y avisa con el rótulo de arriba. Los cambios se
   guardan en la cola y suben en la siguiente sesión con conexión.
 
-### Los tres almacenes
+### Los cinco almacenes
 
-Alimentos, recetas e ingestas. Cada uno es un **mapa `id -> registro`**, con la misma forma en
+Alimentos, recetas, ingestas, menú y mejoras. Cada uno es un **mapa `id -> registro`**, con la misma forma en
 memoria, en IndexedDB y en la nube.
 
 - **Respaldo local en IndexedDB** (base `alimentacion`, almacén `kv`), no en `localStorage`: todos
@@ -84,8 +84,10 @@ memoria, en IndexedDB y en la nube.
   puede llenar. Se pinta con el respaldo local al instante y luego manda la nube.
 - ⚠️ **El orden importa**: primero se lee IndexedDB y se pinta, y solo después se engancha la nube.
   Al revés, el primer snapshot se llevaría por delante lo que hubiera guardado en el aparato.
-- En `localStorage` solo quedan las **preferencias de este navegador**: `misAlimentos.nav.*`.
-  No son datos y no se sincronizan. (La vieja `misAlimentos.tab` ya no se lee ni se escribe.)
+- En `localStorage` solo quedan las **preferencias de este navegador**: `misAlimentos.nav.*`
+  (las secciones abiertas de la barra lateral y `misAlimentos.nav.tab`, la pestaña que se estaba
+  viendo). No son datos y no se sincronizan. (La vieja `misAlimentos.tab`, sin el `nav`, ya no se
+  lee ni se escribe.)
 - **Migración**: la primera vez se vuelca lo que hubiera en las claves viejas de `localStorage`
   (`misAlimentos.v2`, `misAlimentos.v1`, `.recetas.v1`, `.ingestas.v1`) y se marca `local-movido`.
   ⚠️ Sin esa marca, vaciar las recetas las traería de vuelta al recargar. Las claves viejas no se
@@ -114,10 +116,10 @@ memoria, en IndexedDB y en la nube.
 ### Cambios que llegan de fuera
 
 Un listener por almacén. Cuando la nube cambia, se repinta la sección que toca (`rebuildCards()`,
-`refreshRecipes()`, `refreshIntakes()`). ⚠️ Si hay algo **a medio editar** —una tarjeta en edición
-en línea, el formulario de receta o el modal de ingesta abiertos— el repintado se aplaza y lo
-recoge `repaintPending()` al cerrar. Repintar en ese momento se llevaría por delante lo que se esté
-escribiendo.
+`refreshRecipes()`, `refreshIntakes()`, `refreshMenu()`, `refreshTasks()`). ⚠️ Si hay algo **a medio editar** —una
+tarjeta en edición en línea, el formulario de receta o los modales de ingesta o de menú abiertos—
+el repintado se aplaza y lo recoge `repaintPending()` al cerrar. Repintar en ese momento se
+llevaría por delante lo que se esté escribiendo.
 
 El rótulo flotante de arriba (`#sync-note`) solo aparece cuando hay algo que contar: error, sin
 conexión o sin nube. El estado completo está siempre en Ajustes › Sesión.
@@ -142,11 +144,20 @@ nativos. Su estado abierto/cerrado se guarda en `misAlimentos.nav.<id>`.
 Al pie de la barra lateral, pegado abajo con `margin-top: auto` en `.sidebar__foot`, va el botón
 **⚙️ Ajustes** (`#settings-open`, `js-only`). No es una pestaña: abre un modal (ver «Ajustes»).
 
-**La app siempre aterriza en Ingestas**, por decisión expresa: la pestaña activa ya no se recuerda
-entre recargas. Lo primero que hace `init()` es `showIntakesTab()` (la misma función que salta a
-Ingestas al guardar desde el FAB), para no enseñar otra pestaña antes. ⚠️ En el HTML **sigue
-marcada Carne** a propósito: sin JS se abre ahí y se ve la lista de alimentos, en vez de un panel de
-ingestas vacío.
+**Al recargar se vuelve a la pestaña que se estaba viendo**. Se guarda en
+`misAlimentos.nav.tab`, con las demás preferencias de este navegador (no es un dato: no se
+sincroniza ni se exporta). Lo primero que hace `init()` es `showSavedTab()`, para no enseñar otra
+pestaña antes; sin nada guardado —o si lo guardado ya no existe— aterriza en **Menú**
+(`showMenuTab()`).
+
+- Quien marca una pestaña es siempre `showTab(id)`, que además la recuerda; `keepTabState()`
+  escucha el `change` de los radios para los clics de la barra lateral.
+- ⚠️ `showTab()` comprueba que lo guardado sea de verdad un `.tab-state` del grupo `grupo`: en
+  `localStorage` puede haber quedado cualquier cosa, incluso de una pestaña que ya no está.
+- `showIntakesTab()` sigue saltando a Ingestas al guardar desde el FAB, y ahora eso también se
+  recuerda.
+- ⚠️ En el HTML **sigue marcada Carne** a propósito: sin JS se abre ahí y se ve la lista de
+  alimentos, en vez de una cuadrícula vacía.
 
 ### Menú de móvil
 
@@ -314,6 +325,218 @@ suyo.
   añade 96 px de margen inferior para que el FAB no tape la última fila.
 - Las ingestas solo se borran una a una, desde el modal de edición.
 
+## Menú
+
+Sección «Alimentación» de la barra lateral, panel `#panel-menu`, con dos pestañas hermanas:
+**Alimentos** y **Mejoras** (ver abajo). Una cuadrícula de la semana:
+siete columnas (lunes a domingo) con cabecera y cinco filas. En cada celda caben **varias recetas
+del menú**, y cada una es solo un **nombre** y los **alimentos** que lleva.
+
+### Tres pestañas de la barra lateral
+
+Lo que antes eran subpestañas del panel del menú son **tres pestañas normales**, en la sección
+«Alimentación» de la barra lateral, cada una con su panel (y por tanto con sus cuatro listas de
+selectores en `styles.css`, como cualquier otra pestaña):
+
+| Pestaña | Panel | Qué muestra |
+| --- | --- | --- |
+| 🗓️ Menú | `#panel-menu` | La cuadrícula de la semana |
+| 🥗 Alimentos | `#panel-menu-alimentos` | Una tarjeta por grupo de alimentos, cuatro por fila |
+| ✨ Mejoras | `#panel-mejoras` | Un tablero de tareas, una columna por ingesta |
+
+- ⚠️ La pestaña se llama **Alimentos** igual que la sección de la barra lateral que agrupa los
+  alimentos, pero no tienen nada que ver: su id es `tab-menu-alimentos` para no chocar.
+- **Alimentos** (`renderMenuGroups()`) saca **todos** los grupos de la barra lateral, tengan algo o
+  no (`allFoodGroups()`; `foodGroups()` es el mismo con los vacíos fuera, que es lo que quiere el
+  selector del modal). El grupo del que no haya nada en el menú sale con el título solo, sin
+  ninguna frase: la tarjeta está para que las demás no bailen de sitio. De cada grupo lista los alimentos que estén en **alguna** receta del menú,
+  sin decir en cuál: lo que interesa es qué hace falta, no el detalle.
+- ⚠️ El grupo de cada alimento se saca del **id** (`grupo/alimento`), no de su tarjeta: así salen
+  también los que se hayan borrado de las pestañas de alimentos.
+- Se repinta desde `renderMenu()`, así que se entera de todo: altas, bajas, cambios y lo que llega
+  de la nube.
+
+### La cuadrícula
+
+- La tabla (`#menu-week`) está en el HTML, así que se ve sin JavaScript; lo que pone `app.js` en
+  cada celda es la **cabecera** —el título de la fila y el **+**— y, debajo, la lista de recetas
+  (`buildMenuCells()`). Sin JS la cuadrícula sale vacía, solo con los días.
+- **Cada celda lleva el título de su fila**: Desayuno, Media mañana, Almuerzo, Merienda y Cena.
+  Salen de `MENU_ROW_TITLES`, que **es `PLAN_TITLES`**, la lista de «Siguiente ingesta»: una sola
+  lista para las dos cosas. En el modal, el desplegable de la fila enseña esos mismos títulos (el
+  valor sigue siendo el número de fila).
+- ⚠️ `MENU_ROWS` sigue siendo 5 a mano, no `MENU_ROW_TITLES.length`: las filas que hay son las que
+  tenga la tabla del HTML, y un título de más no crearía ninguna.
+- La tabla llena el hueco que queda: el panel activo es `display: flex` en columna (regla propia
+  **después** de la lista de pestañas activas, para ganarle el `display: block`) con
+  `height: 100%`, y la tabla es `flex: 1`.
+- ⚠️ **La tabla es `<table>` pero se pinta como rejilla**: `display: grid` con
+  `grid-template-rows: auto repeat(5, minmax(0, 1fr))`, `thead`/`tbody` en `display: contents` y
+  cada `<tr>` con siete columnas `1fr`. Una tabla normal reparte el alto sobrante en proporción al
+  contenido de cada fila, así que la cabecera se quedaba con más que las demás.
+- Cambiar el `display` de una tabla le quita su semántica, así que el HTML la repone a mano con
+  `role="table"`, `rowgroup`, `row`, `columnheader` y `cell`. Si se tocan los estilos, esos `role`
+  se quedan.
+- La celda no crece con lo que lleva dentro: `.menu-cell__list` se queda con su propia barra de
+  desplazamiento, para que las filas sigan midiendo lo mismo.
+- El **+** (`.menu-add`) va en la cabecera de la celda, a la derecha del título, y las recetas
+  empiezan debajo. Antes flotaba sobre la esquina, en absoluto; con la cabecera ya no hace falta.
+- ⚠️ Está **escondido hasta que el ratón pasa por su celda** (`.menu-cell:hover`), pero con
+  `opacity: 0`, no con `visibility` ni `display`: así se sigue alcanzando con el tabulador —y
+  `:focus-within` lo enseña al llegar— y la cabecera no baila al aparecer. Donde no hay ratón
+  (`@media (hover: none)`) se ve siempre, o en el móvil no habría forma de dar con él.
+
+### Las recetas del menú
+
+- **No tienen nada que ver con el recetario**, por decisión expresa: son otra cosa y viven en su
+  propio almacén, `menu`. Un registro es `{ id, day, row, name, kind, foods, pos }`, con `day` de 0
+  (lunes) a 6, `row` de 0 a 4, `foods` una lista de **ids de alimentos** (`grupo/nombre`), `pos` el
+  sitio que ocupa dentro de su celda y `kind` lo firme que es.
+- **Tres tipos** (`MENU_KINDS`), que se eligen en el modal y solo cambian cómo se pinta la receta:
+  **fijo** en verde, como la tarjeta de «Siguiente ingesta» (`.menu-item--fijo`); **variable**, que
+  es el estilo normal y **el de siempre** (`MENU_KIND_DEF`); y **borrador**, apagado y con el borde
+  a rayas, como deshabilitado (`.menu-item--borrador`), aunque se sigue pudiendo pulsar y arrastrar.
+- El tipo va también en el `title` y en el `aria-label` de la receta: el color solo no lo cuenta.
+- ⚠️ `kind` **se manda solo si no es «variable»**, igual que `foods` vacío: así las recetas de antes
+  de que existiera el campo siguen coincidiendo con lo que vuelve de la nube.
+- ⚠️ `foods` **se manda solo si lleva algo**: una lista vacía la nube la guarda como nada, y el
+  registro de aquí no coincidiría nunca con el que vuelve, así que cada snapshot dispararía una
+  escritura de más. De eso se encarga `menuRec()`, que usan `saveMenu()` y `writeBackup()`.
+- Dentro de una celda van **en el orden que tú les des** (`pos`), no alfabético ni por fecha.
+  `byPosition()` ordena por `pos` y, a igualdad, por id —que empieza por la hora de creación—, así
+  que las que aún no se han tocado salen como se crearon y el orden es el mismo en todos los
+  dispositivos (del orden del mapa de la nube no se puede fiar).
+- ⚠️ **En memoria `pos` lo llevan todas**: `loadMenu()` se lo pone al cargar (0, 1, 2… por celda),
+  también a las de antes de que existiera el campo. Si no, una receta nueva con `pos` se colocaría
+  por delante de las viejas sin él. No se escribe nada al cargar: el campo sube al almacén la
+  primera vez que se guarde algo, y esa vez se reescriben todas.
+- Quien coloca y renumera es **`placeInCell(receta, día, fila, índice)`**, el único sitio que toca
+  `pos`. Un índice mayor que la lista la deja al final (se usa `Infinity` para eso).
+- `renderMenu()` ordena `menuItems` con `byPosition()` **antes de pintar**: el orden de la celda es
+  el del array, y así se decide en un sitio solo.
+- **Alta y edición pasan siempre por el mismo modal** (`#menu-modal`), como en las ingestas:
+  `openMenuModal(celda)` crea y `openMenuModal(null, receta)` edita. `mu.editing` es lo que mira
+  `submitMenuModal()`, y ⚠️ hay que soltarlo **en dos sitios** (`closeMenuModal()` y el evento
+  `close` del `<dialog>`, porque Esc no pasa por la función). Eliminar está dentro del modal.
+- **Se arrastran y se sueltan** (`initMenuDrag()`), como las tarjetas de alimentos: **a otra celda
+  para moverlas y dentro de la suya para reordenarlas**, que es lo mismo por dentro. Los
+  escuchadores van colgados de la tabla, no del documento: los globales de `init()` solo miran
+  `.card` y `.column`, así que los dos sistemas no se pisan. Lo arrastrable es el
+  `<li class="menu-row">`, y la celda entera (`.menu-cell`, con `data-day` y `data-row`) es la zona
+  donde se suelta.
+- El puesto sale de `dropIndexIn()`: la primera receta cuyo **centro** queda por debajo del cursor.
+  ⚠️ La que se arrastra **no se cuenta**, así que el número vale tal cual para `placeInCell()` sin
+  corregir nada. `markDropSpot()` pinta con ese mismo número la raya de dónde va a caer.
+- ⚠️ Al empezar a arrastrar se guarda **el id**, no la receta: si mientras tanto llega un cambio de
+  la nube, `menuItems` se rehace entero y el objeto de antes ya no sería el que se guarda.
+  `busyWith()` cuenta el arrastre como «ocupado», así que el repintado se aplaza hasta soltar.
+- ⚠️ `.menu-item` lleva `-webkit-user-drag: element` porque toda la receta es un `<button>` y
+  WebKit no arrastra los controles de formulario por su cuenta.
+- Soltarla donde ya estaba no hace nada, y no hace falta comprobarlo: `storeCommit()` compara y no
+  manda nada a la nube.
+- **El día y la fila son también dos desplegables** del modal (`readCell()`): al editar se pueden
+  cambiar y la receta se muda igual, entrando **la última** de su nueva celda. Es la forma de
+  moverla **sin ratón** —en el móvil o con el teclado—, donde arrastrar y soltar no funciona.
+  Reordenar dentro de una celda, en cambio, solo se puede arrastrando.
+- **Duplicar** (`duplicateMenuItem()`, solo al editar) hace una copia idéntica de la receta
+  **guardada**, en **su misma celda** y justo debajo del original, por decisión expresa: luego se
+  mueve arrastrando o con los desplegables, o se deja donde está. No copia lo que haya a medio escribir en el formulario, y ⚠️ **el nombre no
+  se toca** (nada de «(copia)», como sí hace el recetario): la gracia es repetir el mismo plato.
+- **Los alimentos salen de las pestañas de alimentos**: `foodGroups()` recorre los
+  `.nav__item` de `#nav-alimentos` para saber el orden y el nombre de cada grupo, y reparte ahí las
+  tarjetas de `cards`. Es decir, lo que se ve en pantalla, incluidos los alimentos añadidos a mano.
+- Se eligen con casillas, agrupadas por grupo, con un buscador encima que solo **esconde** opciones
+  (lo marcado sigue marcado aunque no se vea).
+- **Los elegidos salen todos juntos arriba** (`renderChosen()`), como pastillas que se quitan
+  pulsándolas (`uncheckFood()`), y las casillas ya marcadas se resaltan con
+  `.picker__opt:has(input:checked)`. En la lista sola costaba verlos, repartidos entre grupos o
+  tapados por el buscador. Lo que se guarda se lee **de las casillas** (`readFoods()`), que son la
+  fuente; las pastillas solo las pintan.
+- ⚠️ El selector de las casillas lleva `[type="checkbox"]` a propósito: sin él gana el
+  `.field input` de los campos de texto y las deforma.
+- **En la celda solo se ve el nombre de la receta**, por decisión expresa: los alimentos ocupaban
+  demasiado para lo que aportaban. Siguen en el título flotante (`title`) y en el `aria-label`, y
+  se ven enteros al abrir la receta.
+- Si un alimento elegido **ya no está** en las pestañas, sale igual y marcado, en un grupo aparte
+  («Ya no están en la lista»); si no, al guardar desaparecería sin decir nada. Su nombre se saca
+  del id (`foodName()`).
+- Renombrar o borrar un alimento repinta el menú: `render()` —el pintado de los alimentos— llama al
+  final a `renderMenu()`.
+
+## Mejoras
+
+Pestaña «Mejoras» de la sección «Alimentación», panel `#panel-mejoras`: un tablero tipo Trello con
+**dos vistas de las mismas tareas**, que se alternan con unas subpestañas arriba a la derecha de la
+cabecera (dos radios `.tab-state` del grupo `tasks-view`, mismo truco que en Ingestas; ⚠️ añadir una
+obliga a tocar **tres listas de selectores**: mostrar la sección, marcar la activa y el foco).
+
+| Vista | Sección | Columnas |
+| --- | --- | --- |
+| Por ingesta | `#tasks-por-ingesta` | General y las cinco ingestas (`TASK_COLS`, que es `['General'].concat(PLAN_TITLES)`) |
+| Por alimentos | `#tasks-por-alimentos` | General y los grupos de alimentos (`taskGroups()`) |
+
+- **Por alimentos también tiene su + Añadir**, que abre el modal con **ese grupo** marcado y la
+  ingesta en General, que se cambia ahí mismo. Lo que no se puede es **arrastrar**, por decisión
+  expresa: una tarea puede estar en **varios** grupos —y sale en la columna de cada uno—, así que
+  moverla de columna no querría decir nada claro; los grupos se cambian abriendo la tarea.
+- **Los dos tableros van igual**: las columnas, **todas en la misma fila**, de 250 px para arriba
+  (`grid-auto-flow: column`), y si no caben el tablero se desplaza en horizontal. No hay `@media`
+  que los reparta en varias filas: en el móvil se desplazan igual.
+- En esa vista la pastilla de la tarjeta es **la ingesta**, no los grupos: al revés que en la otra,
+  porque lo que ya dice la columna no hace falta repetirlo (`buildTaskCard(tarea, porGrupo)`).
+- El orden y el `pos` son **los de la vista por ingesta**; la de grupos solo los respeta al pintar.
+- Pulsar una tarjeta abre su ficha en las dos vistas: el escuchador del clic cuelga del panel, no
+  de un tablero.
+
+- Una tarea tiene **título**, **ingesta**, **grupo de alimentos** y **notas**. La ingesta *es* la
+  columna: se elige en un desplegable del modal y cambiarla mueve la tarjeta, que entra la última
+  de su nueva columna.
+- **Los grupos de alimentos** son **varios**: casillas, no un desplegable. Salen de los mismos
+  grupos de la barra lateral (`taskGroups()` = `allFoodGroups()` con **General** delante, que es el
+  de por defecto) y se pintan con el mismo `foodOption()` que el selector de alimentos del menú.
+  **Se rehacen al abrir el modal** (`fillTaskGroups()`), porque los grupos se pueden renombrar o
+  añadir en el HTML; los guardados que ya no estén se añaden igualmente, marcados, para no
+  perderlos al guardar, con el nombre sacado de su id (`taskGroupOf()`).
+- ⚠️ **General y los grupos de alimentos se excluyen**: una mejora lleva o General o una
+  combinación de los demás, nunca las dos cosas. Lo hace `exclusiveTaskGroups()` al marcar o
+  desmarcar (y al abrir el modal, por si lo guardado viene mezclado); `cleanTaskGroups()` lo
+  arregla también al cargar, quitando General cuando viene con otros.
+- ⚠️ **Sin ninguna casilla marcada se vuelve a General**, tanto en las casillas como al guardar
+  (`readTaskGroups()`): la lista nunca está vacía, así que la tarjeta siempre enseña una pastilla.
+- **En el tablero se ven el título y los grupos**, en pastillas (`.task-chip`) debajo del título,
+  con su emoji. Las notas y la ingesta solo se ven al abrir la tarjeta.
+- **Almacenamiento**: el almacén `mejoras`, un mapa de `{ id, col, text, groups, notes, pos }` por
+  id, con `col` de 0 (General) a 5 y `pos` el sitio dentro de la columna. `groups` es la lista de
+  claves de grupo (`carne`, `pescado`…, o `general`) y **no se manda cuando es solo `general`**,
+  como las notas vacías.
+- ⚠️ Las mejoras guardadas antes llevaban `group`, uno solo: `cleanTaskGroups()` lo sigue leyendo y
+  lo convierte en lista. Al volver a guardarlas, el registro pasa a `groups` y el campo viejo
+  desaparece solo (a la nube va el hijo entero). Misma mecánica que el menú: `pos`
+  se normaliza al cargar (`loadTasks()`), `placeInTaskCol()` es el único sitio que lo toca y
+  `byPosition()` —compartida con el menú— ordena por `pos` y, a igualdad, por id.
+- ⚠️ Las notas pasan por `cleanNotes()`, no por `cleanName()`: son de varias líneas y `cleanName()`
+  aplasta los saltos. Unas notas vacías no se mandan a la nube, como el resto de campos de relleno.
+- **El tablero entero lo pinta `app.js`** (`buildTaskBoard()`), columnas incluidas: sin JavaScript
+  no hay nada que enseñar, así que tampoco hay markup que mantener en el HTML.
+- **Colores**: las columnas van en verde (`--yes`) y **la de General en gris** (`--text-soft`),
+  tanto la línea de arriba como el contador y el resalte al soltar encima. La de General lleva
+  `.tasks-col--general`, en los dos tableros.
+- ⚠️ **Clases propias a propósito** (`.tasks-board`, `.tasks-col`, `.task-row`): `.board`,
+  `.column` y `.card` son las de los alimentos, y las miran `collectSeeds()` y el arrastrar y
+  soltar global de `init()`. Reutilizarlas rompería las dos cosas.
+- Las tarjetas se **arrastran entre columnas y se ordenan dentro de la suya**, con la raya de dónde
+  van a caer, igual que las recetas del menú (`initTasksDrag()`, `taskDropIndex()`).
+- **Alta, ficha y edición pasan siempre por el mismo modal** (`#task-modal`), como en las ingestas
+  y el menú: `openTaskModal(columna)` crea y `openTaskModal(col, tarea)` abre la que ya existe.
+  `tu.editing` es lo que mira `submitTaskModal()`, y ⚠️ hay que soltarlo **en dos sitios**
+  (`closeTaskModal()` y el evento `close` del `<dialog>`, porque Esc no pasa por la función).
+  Eliminar está dentro del modal.
+- La tarjeta entera es un `<button class="task-card">` que abre la ficha, como las filas del
+  registro de ingestas o del recetario. No hay edición en línea ni botones por tarjeta.
+- El botón **+ Añadir** va **debajo de la lista**, como en Trello (clase `.adder` de los
+  alimentos), y abre el modal con **su** columna ya elegida.
+- Entra en la copia de seguridad como `mejoras`, revalidada con `cleanTaskRec()`.
+
 ## Recetario
 
 Tres pantallas dentro del mismo panel, alternadas con el atributo `hidden` desde `showView()`:
@@ -350,7 +573,7 @@ de la app en un archivo**.
   (lo escribe `syncStatus()`, que se llama también al abrir el modal) y `#settings-logout`, que
   cierra sesión y recarga.
 - **Exportar** (`exportData()`) arma el objeto de `backupData()` —`{ app, version, exported,
-  alimentos, recetas, ingestas }`— y lo guarda como `alimentacion-AAAA-MM-DD.json`. Se exporta lo
+  alimentos, recetas, ingestas, menu, mejoras }`— y lo guarda como `alimentacion-AAAA-MM-DD.json`. Se exporta lo
   que hay en el almacén, que es lo mismo que hay en la nube.
 - **Elegir la carpeta depende del navegador**, y por eso hay dos caminos. Si existe
   `window.showSaveFilePicker()` (Chrome y Edge, y solo por `http(s)`: abierta como `file://`
@@ -364,8 +587,8 @@ de la app en un archivo**.
   no datos.
 - **Importar** pasa por un `<input type="file">` oculto (`.settings-file`) que dispara el botón.
   `readBackup()` exige la marca `app: 'misAlimentos'` y **revalida todo** como si viniera del
-  almacén: las ingestas por `cleanDay()`/`cleanTime()`, y el HTML de las recetas por
-  `sanitizeHtml()`. ⚠️ Ese saneado no es opcional: el archivo es contenido de fuera.
+  almacén: las ingestas por `cleanDay()`/`cleanTime()`, el menú por `cleanMenuRec()`, las mejoras por
+  `cleanTaskRec()` y el HTML de las recetas por `sanitizeHtml()`. ⚠️ Ese saneado no es opcional: el archivo es contenido de fuera.
 - **Se escriben solo las secciones que trae el archivo** (`writeBackup()`), así que una copia sin
   recetas no borra las recetas que ya haya. El aviso de `confirm` dice cuáles son, con el texto
   que arma `backupSummary()`. Lo importado va al almacén local **y a la nube**, como cualquier otro

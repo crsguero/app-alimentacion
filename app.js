@@ -12,6 +12,7 @@
 
   /* Preferencias de este navegador: no son datos, no se sincronizan */
   var NAV_KEY = 'misAlimentos.nav';
+  var TAB_KEY = NAV_KEY + '.tab';   // la pestaña que se estaba viendo
 
   /* Claves del viejo localStorage: solo se leen una vez, al migrar */
   var LS_FOODS = 'misAlimentos.v2';
@@ -80,10 +81,10 @@
   var fbOnline = false;  // websocket vivo (.info/connected)
   var fbSynced = {};     // almacén -> ya llegó su primer snapshot
 
-  /* ---------- Los tres almacenes ----------
-     Alimentos, recetas e ingestas. Cada uno es un mapa `id -> registro`, igual
-     en memoria, en IndexedDB y en la nube: así un cambio escribe solo el hijo
-     que toca y dos dispositivos no se pisan al guardar a la vez.
+  /* ---------- Los cinco almacenes ----------
+     Alimentos, recetas, ingestas, menú y mejoras. Cada uno es un mapa `id -> registro`,
+     igual en memoria, en IndexedDB y en la nube: así un cambio escribe solo el
+     hijo que toca y dos dispositivos no se pisan al guardar a la vez.
      IndexedDB y no localStorage porque todos los archivos abiertos con file://
      comparten un mismo localStorage de ~5 MB que otra app local puede llenar. */
   var DB_NAME = 'alimentacion';
@@ -91,7 +92,9 @@
   var S_FOODS = 'alimentos';
   var S_RECIPES = 'recetas';
   var S_INTAKES = 'ingestas';
-  var STORES = [S_FOODS, S_RECIPES, S_INTAKES];
+  var S_MENU = 'menu';
+  var S_TASKS = 'mejoras';
+  var STORES = [S_FOODS, S_RECIPES, S_INTAKES, S_MENU, S_TASKS];
 
   var OUTBOX_KEY = 'cola';          // cambios sin subir; no se sincroniza
   var MOVED_KEY = 'local-movido';   // localStorage ya volcado a IndexedDB
@@ -474,12 +477,16 @@
     if (key === S_FOODS) { rebuildCards(); }
     else if (key === S_RECIPES) { refreshRecipes(); }
     else if (key === S_INTAKES) { refreshIntakes(); }
+    else if (key === S_MENU) { refreshMenu(); }
+    else if (key === S_TASKS) { refreshTasks(); }
   }
 
   function busyWith(key) {
     if (key === S_FOODS) { return !!document.querySelector('.card--editing'); }
     if (key === S_RECIPES) { return ui.current === 'form'; }
     if (key === S_INTAKES) { return !!(iu.modal && iu.modal.hasAttribute('open')); }
+    if (key === S_MENU) { return !!(mu.modal && mu.modal.hasAttribute('open')) || !!mu.dragId; }
+    if (key === S_TASKS) { return !!(tu.modal && tu.modal.hasAttribute('open')) || !!tu.dragId; }
     return false;
   }
 
@@ -681,6 +688,10 @@
       var btn = card && card.el.querySelector(focusSel);
       if (btn) { btn.focus(); }
     }
+
+    /* Los nombres de los alimentos salen también en el menú: si se renombra
+       uno (o se borra), la celda tiene que enterarse. */
+    renderMenu();
   }
 
   /* ---------- Acciones ---------- */
@@ -1906,10 +1917,9 @@
     repaintPending();            // lo que llegó de la nube con el modal abierto
   }
 
-  /* Al arrancar, y al guardar desde el FAB para ver el registro */
+  /* Al guardar desde el FAB, para ver el registro que se acaba de crear */
   function showIntakesTab() {
-    var tab = document.getElementById('tab-ingestas');
-    if (tab) { tab.checked = true; }
+    showTab('tab-ingestas');
   }
 
   /* Sin tipo no se guarda: se marca el campo en rojo y se lleva el foco al primero.
@@ -2062,6 +2072,1509 @@
   }
 
 
+  /* ---------- Menú de la semana ----------
+     Una cuadrícula de siete días por cinco filas. En cada celda caben varias
+     recetas, y una receta del menú es solo un nombre y los alimentos que lleva,
+     elegidos entre los de las pestañas de alimentos. No tienen nada que ver con
+     las del recetario: son otra cosa y viven en su propio almacén. */
+
+  var MENU_DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+  var MENU_ROWS = 5;
+
+  /* Las cinco filas son las cinco ingestas que se planifican, y son las mismas
+     que las de «Siguiente ingesta»: una sola lista para las dos cosas. */
+  var MENU_ROW_TITLES = PLAN_TITLES;
+  /* Cómo de firme es la receta, y cómo se pinta: «variable» es lo normal,
+     «fijo» sale en verde y «borrador» apagado. */
+  var MENU_KINDS = ['fijo', 'variable', 'borrador'];
+  var MENU_KIND_DEF = 'variable';
+  var MENU_KIND_LABELS = { fijo: 'Fijo', variable: 'Variable', borrador: 'Borrador' };
+
+  var menuItems = [];   // { id, day, row, name, foods, kind, pos }
+  var mu = {};
+
+  function menuId() {
+    return 'm-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  /* Sin ids repetidos y sin huecos: los alimentos se guardan como lista de ids */
+  function cleanFoodIds(list) {
+    var out = [];
+
+    if (!Array.isArray(list)) { return out; }
+
+    list.forEach(function (value) {
+      var id = String(value || '');
+      if (id && out.indexOf(id) === -1) { out.push(id); }
+    });
+
+    return out;
+  }
+
+  function cleanMenuKind(value) {
+    var kind = String(value || '').toLowerCase();
+    return MENU_KINDS.indexOf(kind) !== -1 ? kind : MENU_KIND_DEF;
+  }
+
+  /* Solo pasa lo que cabe en la cuadrícula: día 0-6, fila 0-4 y un nombre.
+     `pos` es el orden a mano dentro de la celda; las recetas de antes de que
+     existiera no lo llevan y se les pone al cargar. */
+  function cleanMenuRec(id, rec) {
+    var day = Math.floor(Number(rec.day));
+    var row = Math.floor(Number(rec.row));
+    var name = cleanName(rec.name);
+    var pos = Math.floor(Number(rec.pos));
+    var item;
+
+    if (!id || !name) { return null; }
+    if (!(day >= 0 && day < MENU_DAYS.length)) { return null; }
+    if (!(row >= 0 && row < MENU_ROWS)) { return null; }
+
+    item = {
+      id: String(id),
+      day: day,
+      row: row,
+      name: name,
+      kind: cleanMenuKind(rec.kind),
+      foods: cleanFoodIds(rec.foods)
+    };
+
+    if (pos >= 0) { item.pos = pos; }
+    return item;
+  }
+
+  /* Primero el orden a mano y, a igualdad, el id: empieza por la hora de
+     creación, así que las que aún no se han ordenado salen como se crearon
+     (del orden del mapa de la nube no se puede fiar). */
+  function byPosition(a, b) {
+    var pa = typeof a.pos === 'number' ? a.pos : Infinity;
+    var pb = typeof b.pos === 'number' ? b.pos : Infinity;
+
+    if (pa !== pb) { return pa - pb; }
+    return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0);
+  }
+
+  function loadMenu() {
+    var map = storeCopy(S_MENU);
+    var list = [];
+    var seen = {};
+
+    Object.keys(map).forEach(function (id) {
+      var item = cleanMenuRec(id, map[id]);
+      if (item) { list.push(item); }
+    });
+
+    list.sort(byPosition);
+
+    /* En memoria todas llevan `pos`, y es su sitio en la celda: 0, 1, 2… Así
+       una receta nueva se coloca contando, sin mezclarse con las de antes, que
+       no lo traían. Al almacén no se escribe nada: eso ya pasará al guardar. */
+    list.forEach(function (item) {
+      var key = item.day + ':' + item.row;
+      seen[key] = seen[key] === undefined ? 0 : seen[key] + 1;
+      item.pos = seen[key];
+    });
+
+    return list;
+  }
+
+  /* Una lista de alimentos vacía la nube la guarda como nada, así que tampoco
+     se manda: de lo contrario el registro de aquí y el que vuelve nunca
+     coincidirían y cada snapshot dispararía una escritura de más. */
+  function menuRec(item) {
+    var rec = { id: item.id, day: item.day, row: item.row, name: item.name };
+
+    if (typeof item.pos === 'number') { rec.pos = item.pos; }
+
+    /* El tipo de siempre tampoco se manda, por lo mismo: así las recetas que
+       vienen de antes de que existiera el campo siguen coincidiendo. */
+    if (item.kind && item.kind !== MENU_KIND_DEF) { rec.kind = item.kind; }
+    if (item.foods && item.foods.length) { rec.foods = item.foods.slice(); }
+    return rec;
+  }
+
+  /* Coloca la receta en su sitio dentro de la celda y renumera las de esa
+     celda. Un índice más grande que la lista la deja al final. */
+  function placeInCell(item, day, row, index) {
+    var list = menuItems.filter(function (other) {
+      return other !== item && other.day === day && other.row === row;
+    }).sort(byPosition);
+
+    var at = Math.max(0, Math.min(index, list.length));
+
+    item.day = day;
+    item.row = row;
+    list.splice(at, 0, item);
+    list.forEach(function (other, i) { other.pos = i; });
+  }
+
+  function saveMenu() {
+    var map = {};
+    menuItems.forEach(function (item) { map[item.id] = menuRec(item); });
+    storeCommit(S_MENU, map);
+  }
+
+  function menuById(id) {
+    for (var i = 0; i < menuItems.length; i++) {
+      if (menuItems[i].id === id) { return menuItems[i]; }
+    }
+    return null;
+  }
+
+  /* ---------- Los alimentos que se pueden elegir ---------- */
+
+  /* Salen de las pestañas de alimentos: las mismas tarjetas que hay en
+     pantalla, en el orden y con los nombres de grupo de la barra lateral. */
+  function allFoodGroups() {
+    var groups = [];
+    var byGroup = {};
+
+    document.querySelectorAll('#nav-alimentos .nav__item').forEach(function (item) {
+      var group = String(item.getAttribute('for') || '').replace(/^tab-/, '');
+      var label = item.querySelector('.nav__label');
+      var emoji = item.querySelector('.nav__emoji');
+
+      if (!group || byGroup[group]) { return; }
+
+      byGroup[group] = {
+        group: group,
+        label: label ? label.textContent : group,
+        emoji: emoji ? emoji.textContent : '',
+        foods: []
+      };
+      groups.push(byGroup[group]);
+    });
+
+    cards
+      .slice()
+      .sort(function (a, b) { return a.name.localeCompare(b.name, 'es'); })
+      .forEach(function (card) {
+        if (byGroup[card.group]) { byGroup[card.group].foods.push(card); }
+      });
+
+    return groups;
+  }
+
+  /* Para elegir, los grupos vacíos no pintan nada */
+  function foodGroups() {
+    return allFoodGroups().filter(function (group) { return group.foods.length; });
+  }
+
+  /* El alimento puede haberse borrado después de ponerlo en el menú: entonces
+     el nombre se saca del propio id, que es «grupo/nombre-del-alimento». */
+  function foodName(id) {
+    var card = byId(id);
+    if (card) { return card.name; }
+    return upperFirst(String(id).split('/').pop().replace(/-/g, ' '));
+  }
+
+  /* ---------- Pintado de la cuadrícula ---------- */
+
+  /* En la celda solo se ve el nombre: los alimentos ocupaban demasiado para lo
+     que aportaban. Siguen a mano en el título flotante y al abrir la receta. */
+  function buildMenuItem(item) {
+    var li = document.createElement('li');
+    var btn = document.createElement('button');
+    var name = document.createElement('span');
+    var label = item.name;
+
+    /* Lo que se arrastra es el <li>, como en las tarjetas de alimentos: el
+       botón de dentro se queda para abrir la receta con un clic. */
+    li.className = 'menu-row';
+    li.dataset.id = item.id;
+    li.setAttribute('draggable', 'true');
+
+    btn.type = 'button';
+    btn.className = 'menu-item menu-item--' + item.kind;
+    btn.dataset.id = item.id;
+
+    name.className = 'menu-item__name';
+    name.textContent = item.name;
+    btn.appendChild(name);
+
+    /* El tipo va también en el texto: el color solo no lo cuenta todo */
+    if (item.kind !== MENU_KIND_DEF) { label += ' (' + MENU_KIND_LABELS[item.kind] + ')'; }
+    if (item.foods.length) { label += ': ' + item.foods.map(foodName).join(', '); }
+
+    btn.title = label;
+    btn.setAttribute('aria-label', 'Editar ' + label);
+    li.appendChild(btn);
+    return li;
+  }
+
+  function renderMenu() {
+    if (!mu.cells) { return; }
+
+    /* El orden de la celda es el del array: se ordena aquí, en un sitio solo */
+    menuItems.sort(byPosition);
+    mu.cells.forEach(function (cell) { cell.list.innerHTML = ''; });
+
+    menuItems.forEach(function (item) {
+      var cell = mu.cellAt[item.day + ':' + item.row];
+      if (cell) { cell.list.appendChild(buildMenuItem(item)); }
+    });
+
+    renderMenuGroups();
+  }
+
+  /* ---------- Subpestaña «Alimentos»: qué lleva el menú, por grupos ----------
+     Una tarjeta por grupo de alimentos, salga o no alguno suyo en el menú. De
+     cada uno se listan los alimentos que estén en **alguna** receta, sin decir
+     en cuál: lo que interesa es la lista de la compra, no el detalle. */
+
+  function renderMenuGroups() {
+    var box = mu.groups;
+    var used = {};
+
+    if (!box) { return; }
+
+    menuItems.forEach(function (item) {
+      item.foods.forEach(function (id) { used[id] = true; });
+    });
+
+    box.innerHTML = '';
+
+    allFoodGroups().forEach(function (group) {
+      /* El grupo se saca del id («grupo/alimento»), no de la tarjeta: así
+         también salen los alimentos que se hayan borrado de las pestañas. */
+      var names = Object.keys(used)
+        .filter(function (id) { return String(id).split('/')[0] === group.group; })
+        .map(foodName)
+        .sort(function (a, b) { return a.localeCompare(b, 'es'); });
+
+      box.appendChild(buildMenuGroup(group, names));
+    });
+  }
+
+  function buildMenuGroup(group, names) {
+    var card = document.createElement('section');
+    var head = document.createElement('h2');
+    var name = document.createElement('span');
+    var list;
+
+    card.className = 'menu-group';
+    head.className = 'menu-group__title';
+
+    /* El mismo emoji que lleva el grupo en la barra lateral, delante del
+       título. Es decoración: el nombre ya está escrito al lado. */
+    if (group.emoji) {
+      var emoji = document.createElement('span');
+      emoji.className = 'menu-group__emoji';
+      emoji.setAttribute('aria-hidden', 'true');
+      emoji.textContent = group.emoji;
+      head.appendChild(emoji);
+    }
+
+    name.textContent = group.label;
+    head.appendChild(name);
+    card.appendChild(head);
+
+    /* Sin nada del grupo en el menú, la tarjeta se queda con el título solo:
+       sale igual para que las demás no bailen de sitio. */
+    if (!names.length) { return card; }
+
+    list = document.createElement('ul');
+    list.className = 'menu-group__list';
+
+    names.forEach(function (name) {
+      var li = document.createElement('li');
+      li.textContent = name;
+      list.appendChild(li);
+    });
+
+    card.appendChild(list);
+    return card;
+  }
+
+  function menuRowTitle(row) {
+    return MENU_ROW_TITLES[row] || ('Fila ' + (row + 1));
+  }
+
+  /* La cuadrícula está en el HTML, para que se siga viendo sin JavaScript.
+     Lo que pone el JS en cada celda es la cabecera —el título de la fila y el
+     +— y, debajo, la lista de recetas. */
+  function buildMenuCell(td, day, row) {
+    var box = document.createElement('div');
+    var head = document.createElement('div');
+    var title = document.createElement('span');
+    var list = document.createElement('ul');
+    var add = document.createElement('button');
+    var cell = { day: day, row: row, list: list };
+    var where = MENU_DAYS[day] + ', ' + menuRowTitle(row);
+
+    box.className = 'menu-cell';
+    box.dataset.day = day;      // de aquí salen el día y la fila al soltar
+    box.dataset.row = row;
+
+    head.className = 'menu-cell__head';
+    title.className = 'menu-cell__title';
+    title.textContent = menuRowTitle(row);
+    title.title = menuRowTitle(row);   // en columna estrecha se recorta
+    list.className = 'menu-cell__list';
+
+    add.type = 'button';
+    add.className = 'menu-add';
+    add.textContent = '+';
+    add.dataset.day = day;
+    add.dataset.row = row;
+    add.title = 'Añadir receta';
+    add.setAttribute('aria-label', 'Añadir receta: ' + where);
+
+    head.appendChild(title);
+    head.appendChild(add);
+    box.appendChild(head);
+    box.appendChild(list);
+    td.appendChild(box);
+
+    mu.cellAt[day + ':' + row] = cell;
+    return cell;
+  }
+
+  function buildMenuCells() {
+    var body = mu.table ? mu.table.tBodies[0] : null;
+    var row;
+    var day;
+
+    if (!body) { return false; }
+
+    mu.cells = [];
+    mu.cellAt = {};
+
+    for (row = 0; row < body.rows.length && row < MENU_ROWS; row++) {
+      for (day = 0; day < body.rows[row].cells.length && day < MENU_DAYS.length; day++) {
+        mu.cells.push(buildMenuCell(body.rows[row].cells[day], day, row));
+      }
+    }
+
+    return true;
+  }
+
+  /* ---------- Arrastrar y soltar entre celdas ----------
+     Igual que las tarjetas de alimentos, pero encerrado en la tabla: los
+     escuchadores globales de `init()` solo miran `.card` y `.column`, así que
+     los dos sistemas no se tocan. Sin ratón —en el móvil o con el teclado— la
+     receta se muda con los desplegables de día y fila del modal. */
+
+  function clearMenuOver() {
+    if (!mu.table) { return; }
+
+    mu.table.querySelectorAll('.menu-cell--over, .menu-row--drop, .menu-row--drop-end')
+      .forEach(function (el) {
+        el.classList.remove('menu-cell--over');
+        el.classList.remove('menu-row--drop');
+        el.classList.remove('menu-row--drop-end');
+      });
+  }
+
+  /* En qué puesto de la celda cae, contando desde arriba: la primera receta
+     cuyo centro queda por debajo del cursor. La que se arrastra no se cuenta,
+     así que el número vale tal cual para `placeInCell()`. */
+  function dropIndexIn(box, y) {
+    var rows = box.querySelectorAll('.menu-row');
+    var index = 0;
+    var i;
+    var rect;
+
+    for (i = 0; i < rows.length; i++) {
+      if (rows[i].dataset.id === mu.dragId) { continue; }
+
+      rect = rows[i].getBoundingClientRect();
+      if (y < rect.top + rect.height / 2) { return index; }
+      index++;
+    }
+
+    return index;
+  }
+
+  /* La raya verde que dice dónde va a caer: encima de la receta que quedaría
+     debajo, o debajo de la última si va al final. */
+  function markDropSpot(box, y) {
+    var rows = box.querySelectorAll('.menu-row');
+    var index = dropIndexIn(box, y);
+    var seen = 0;
+    var last = null;
+    var i;
+
+    for (i = 0; i < rows.length; i++) {
+      if (rows[i].dataset.id === mu.dragId) { continue; }
+
+      if (seen === index) { rows[i].classList.add('menu-row--drop'); return; }
+      last = rows[i];
+      seen++;
+    }
+
+    if (last) { last.classList.add('menu-row--drop-end'); }
+  }
+
+  function moveMenuItem(id, day, row, index) {
+    /* Se busca por id y no se guarda la receta al empezar a arrastrar: si
+       mientras tanto llega un cambio de la nube, `menuItems` se rehace entero
+       y el objeto de antes ya no sería el que se guarda. */
+    var item = menuById(id);
+
+    if (!item) { return; }
+    if (!(day >= 0 && day < MENU_DAYS.length)) { return; }
+    if (!(row >= 0 && row < MENU_ROWS)) { return; }
+
+    /* Soltarla donde estaba no cambia nada: `storeCommit()` compara y no manda
+       nada a la nube, así que no hace falta mirarlo aquí. */
+    placeInCell(item, day, row, index);
+    renderMenu();
+    saveMenu();
+  }
+
+  function initMenuDrag() {
+    mu.table.addEventListener('dragstart', function (e) {
+      var li = e.target.closest ? e.target.closest('.menu-row') : null;
+      if (!li) { return; }
+
+      mu.dragId = li.dataset.id;
+      li.classList.add('menu-row--dragging');
+
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', li.dataset.id);
+      }
+    });
+
+    mu.table.addEventListener('dragend', function (e) {
+      var li = e.target.closest ? e.target.closest('.menu-row') : null;
+
+      if (li) { li.classList.remove('menu-row--dragging'); }
+      mu.dragId = null;
+      clearMenuOver();
+      repaintPending();     // lo que llegó de la nube mientras se arrastraba
+    });
+
+    mu.table.addEventListener('dragover', function (e) {
+      var box = e.target.closest ? e.target.closest('.menu-cell') : null;
+      if (!box || !mu.dragId) { return; }
+
+      e.preventDefault();
+      if (e.dataTransfer) { e.dataTransfer.dropEffect = 'move'; }
+
+      clearMenuOver();
+      box.classList.add('menu-cell--over');
+      markDropSpot(box, e.clientY);
+    });
+
+    mu.table.addEventListener('dragleave', function (e) {
+      var box = e.target.closest ? e.target.closest('.menu-cell') : null;
+      if (box && !box.contains(e.relatedTarget)) { clearMenuOver(); }
+    });
+
+    mu.table.addEventListener('drop', function (e) {
+      var box = e.target.closest ? e.target.closest('.menu-cell') : null;
+      if (!box || !mu.dragId) { return; }
+
+      var index = dropIndexIn(box, e.clientY);
+
+      e.preventDefault();
+      clearMenuOver();
+      moveMenuItem(mu.dragId, Number(box.dataset.day), Number(box.dataset.row), index);
+      mu.dragId = null;
+    });
+  }
+
+  /* ---------- Modal: dar de alta y editar una receta del menú ---------- */
+
+  function foodOption(id, name, checked) {
+    var label = document.createElement('label');
+    var input = document.createElement('input');
+    var text = document.createElement('span');
+
+    label.className = 'picker__opt';
+    label.dataset.find = slug(name);   // sin tildes, para el buscador
+
+    input.type = 'checkbox';
+    input.value = id;
+    input.checked = !!checked;
+
+    text.textContent = name;
+    label.appendChild(input);
+    label.appendChild(text);
+    return label;
+  }
+
+  function foodGroupBox(title) {
+    var box = document.createElement('div');
+    var head = document.createElement('p');
+
+    box.className = 'picker__group';
+    head.className = 'picker__group-title';
+    head.textContent = title;
+    box.appendChild(head);
+    return box;
+  }
+
+  function buildFoodPicker(selected) {
+    var chosen = cleanFoodIds(selected);
+    var seen = {};
+    var gone;
+
+    mu.foods.innerHTML = '';
+
+    foodGroups().forEach(function (group) {
+      var box = foodGroupBox(group.label);
+
+      group.foods.forEach(function (card) {
+        seen[card.id] = true;
+        box.appendChild(foodOption(card.id, card.name, chosen.indexOf(card.id) !== -1));
+      });
+
+      mu.foods.appendChild(box);
+    });
+
+    /* Lo que se eligió en su día y ya no está en las pestañas se sigue viendo,
+       marcado: si no, al guardar desaparecería sin decir nada. */
+    gone = chosen.filter(function (id) { return !seen[id]; });
+
+    if (gone.length) {
+      var box = foodGroupBox('Ya no están en la lista');
+      gone.forEach(function (id) { box.appendChild(foodOption(id, foodName(id), true)); });
+      mu.foods.appendChild(box);
+    }
+
+    if (!mu.foods.children.length) {
+      var empty = document.createElement('p');
+      empty.className = 'picker__empty';
+      empty.textContent = 'No hay alimentos todavía. Se añaden en las pestañas de alimentos.';
+      mu.foods.appendChild(empty);
+    }
+
+    renderChosen();
+  }
+
+  /* El buscador solo esconde opciones: lo marcado sigue marcado aunque no se vea */
+  function filterFoodPicker() {
+    var query = slug(mu.search.value || '');
+
+    mu.foods.querySelectorAll('.picker__group').forEach(function (group) {
+      var left = 0;
+
+      group.querySelectorAll('.picker__opt').forEach(function (opt) {
+        var hit = !query || opt.dataset.find.indexOf(query) !== -1;
+        opt.hidden = !hit;
+        if (hit) { left++; }
+      });
+
+      group.hidden = !left;
+    });
+  }
+
+  function readFoods() {
+    var out = [];
+    mu.foods.querySelectorAll('input:checked').forEach(function (input) {
+      out.push(input.value);
+    });
+    return out;
+  }
+
+  function uncheckFood(id) {
+    mu.foods.querySelectorAll('input:checked').forEach(function (input) {
+      if (input.value === id) { input.checked = false; }
+    });
+  }
+
+  /* Los elegidos, todos juntos arriba: en la lista de casillas cuesta verlos,
+     sobre todo si están repartidos entre varios grupos o los tapa el buscador. */
+  function renderChosen() {
+    var chosen = readFoods();
+
+    mu.chosen.innerHTML = '';
+
+    if (!chosen.length) {
+      var none = document.createElement('p');
+      none.className = 'picker__none';
+      none.textContent = 'Ningún alimento elegido todavía.';
+      mu.chosen.appendChild(none);
+      return;
+    }
+
+    chosen.forEach(function (id) {
+      var chip = document.createElement('button');
+      var text = document.createElement('span');
+      var cross = document.createElement('span');
+      var name = foodName(id);
+
+      chip.type = 'button';
+      chip.className = 'chip';
+      chip.dataset.id = id;
+      chip.title = 'Quitar ' + name;
+      chip.setAttribute('aria-label', 'Quitar ' + name);
+
+      text.textContent = name;
+      cross.className = 'chip__x';
+      cross.textContent = '✕';
+      cross.setAttribute('aria-hidden', 'true');
+
+      chip.appendChild(text);
+      chip.appendChild(cross);
+      mu.chosen.appendChild(chip);
+    });
+  }
+
+  /* El día y la fila salen de los desplegables: al editar se pueden cambiar, y
+     así una receta se muda de celda sin tener que rehacerla. */
+  function readCell() {
+    var day = Math.floor(Number(mu.day.value));
+    var row = Math.floor(Number(mu.row.value));
+
+    if (!(day >= 0 && day < MENU_DAYS.length)) { day = mu.cell.day; }
+    if (!(row >= 0 && row < MENU_ROWS)) { row = mu.cell.row; }
+
+    return { day: day, row: row };
+  }
+
+  /* El mismo modal da de alta y edita, como en las ingestas: con receta se
+     edita y sin ella se crea en la celda que se pase. */
+  function openMenuModal(cell, item) {
+    var editing = item || null;
+
+    mu.editing = editing;
+    mu.cell = editing ? { day: editing.day, row: editing.row } : cell;
+    mu.head.textContent = editing ? 'Editar receta' : 'Nueva receta';
+    mu.day.value = String(mu.cell.day);
+    mu.row.value = String(mu.cell.row);
+    mu.dup.hidden = !editing;            // solo se duplica lo que ya existe
+    mu.del.hidden = !editing;            // y solo se borra lo que ya existe
+    mu.name.value = editing ? editing.name : '';
+    mu.kind.value = editing ? editing.kind : MENU_KIND_DEF;
+    mu.search.value = '';
+
+    buildFoodPicker(editing ? editing.foods : []);
+    filterFoodPicker();
+
+    if (typeof mu.modal.showModal === 'function') { mu.modal.showModal(); }
+    else { mu.modal.setAttribute('open', ''); }   // navegador sin <dialog>
+
+    mu.name.focus();
+    mu.name.select();
+  }
+
+  function closeMenuModal() {
+    mu.editing = null;
+
+    if (typeof mu.modal.close === 'function') {
+      mu.modal.close();          // <dialog> devuelve el foco al + por su cuenta
+    } else {
+      mu.modal.removeAttribute('open');
+    }
+
+    repaintPending();            // lo que llegó de la nube con el modal abierto
+  }
+
+  function submitMenuModal(e) {
+    e.preventDefault();
+
+    var name = cleanName(mu.name.value);
+    if (!name) { mu.name.focus(); return; }
+
+    var foods = readFoods();
+    var cell = readCell();
+    var kind = cleanMenuKind(mu.kind.value);
+    var fresh;
+
+    if (mu.editing) {
+      mu.editing.name = name;
+      mu.editing.kind = kind;
+      mu.editing.foods = foods;
+
+      /* Si se ha cambiado el día o la fila, la receta se muda de celda y entra
+         la última; quedándose donde estaba, conserva su sitio. */
+      if (mu.editing.day !== cell.day || mu.editing.row !== cell.row) {
+        placeInCell(mu.editing, cell.day, cell.row, Infinity);
+      }
+    } else {
+      fresh = {
+        id: menuId(),
+        day: cell.day,
+        row: cell.row,
+        name: name,
+        kind: kind,
+        foods: foods
+      };
+
+      menuItems.push(fresh);
+      placeInCell(fresh, cell.day, cell.row, Infinity);
+    }
+
+    renderMenu();
+    saveMenu();
+    closeMenuModal();
+  }
+
+  /* Copia idéntica de la receta guardada, y **en su misma celda**: ya se moverá
+     luego con los desplegables, o no. Copia lo guardado, no lo que haya a medio
+     escribir en el formulario. El nombre tampoco se toca (nada de «(copia)»,
+     como sí hace el recetario): la gracia es repetir el mismo plato. */
+  function duplicateMenuItem() {
+    var item = mu.editing;
+    var copy;
+
+    if (!item) { return; }
+
+    copy = {
+      id: menuId(),
+      day: item.day,
+      row: item.row,
+      name: item.name,
+      kind: item.kind,
+      foods: item.foods.slice()
+    };
+
+    menuItems.push(copy);
+    placeInCell(copy, item.day, item.row, item.pos + 1);   // justo debajo del original
+
+    renderMenu();
+    saveMenu();
+    closeMenuModal();
+  }
+
+  /* Devuelve si se llegó a borrar: en el modal hace falta para saber si cerrarlo */
+  function removeMenuItem(item) {
+    if (!item) { return false; }
+    if (!window.confirm('¿Eliminar «' + item.name + '» del menú?')) { return false; }
+
+    menuItems.splice(menuItems.indexOf(item), 1);
+    renderMenu();
+    saveMenu();
+    return true;
+  }
+
+  /* Donde aterriza la app la primera vez, sin nada guardado */
+  function showMenuTab() {
+    showTab('tab-menu');
+  }
+
+  function initMenu() {
+    mu.table = document.getElementById('menu-week');
+    mu.groups = document.getElementById('menu-groups');
+    if (!mu.table || !buildMenuCells()) { return; }
+
+    menuItems = loadMenu();
+    renderMenu();
+    initMenuDrag();
+
+    /* Sin modal no hay alta ni edición, pero el menú se sigue viendo */
+    mu.modal = document.getElementById('menu-modal');
+    if (!mu.modal) { return; }
+
+    mu.form = document.getElementById('menu-modal-form');
+    mu.head = document.getElementById('menu-modal-title');
+    mu.day = document.getElementById('menu-modal-day');
+    mu.row = document.getElementById('menu-modal-row');
+    mu.name = document.getElementById('menu-modal-name');
+    mu.kind = document.getElementById('menu-modal-kind');
+    mu.search = document.getElementById('menu-modal-search');
+    mu.foods = document.getElementById('menu-modal-foods');
+    mu.chosen = document.getElementById('menu-modal-chosen');
+    mu.dup = document.getElementById('menu-modal-duplicate');
+    mu.del = document.getElementById('menu-modal-delete');
+
+    /* El + abre el modal para crear; una receta ya puesta, para editarla */
+    mu.table.addEventListener('click', function (e) {
+      var add = e.target.closest('.menu-add');
+
+      if (add) {
+        openMenuModal({ day: Number(add.dataset.day), row: Number(add.dataset.row) });
+        return;
+      }
+
+      var btn = e.target.closest('.menu-item');
+      if (!btn) { return; }
+
+      var item = menuById(btn.dataset.id);
+      if (item) { openMenuModal(null, item); }
+    });
+
+    mu.form.addEventListener('submit', submitMenuModal);
+    mu.search.addEventListener('input', filterFoodPicker);
+    mu.foods.addEventListener('change', renderChosen);
+
+    /* Pulsar uno de los elegidos lo quita: desmarca su casilla y repinta */
+    mu.chosen.addEventListener('click', function (e) {
+      var chip = e.target.closest('.chip');
+      if (!chip) { return; }
+
+      uncheckFood(chip.dataset.id);
+      renderChosen();
+    });
+
+    document.getElementById('menu-modal-close').addEventListener('click', closeMenuModal);
+    document.getElementById('menu-modal-cancel').addEventListener('click', closeMenuModal);
+
+    mu.dup.addEventListener('click', duplicateMenuItem);
+
+    mu.del.addEventListener('click', function () {
+      if (removeMenuItem(mu.editing)) { closeMenuModal(); }
+    });
+
+    /* Clic en el fondo oscuro = cerrar (Esc ya lo gestiona <dialog>) */
+    mu.modal.addEventListener('click', function (e) {
+      if (e.target === mu.modal) { closeMenuModal(); }
+    });
+
+    /* Cerrar con Esc no pasa por closeMenuModal(): hay que soltar la edición igual */
+    mu.modal.addEventListener('close', function () {
+      mu.editing = null;
+      repaintPending();
+    });
+  }
+
+  /* Vuelve a pintar el menú con lo que acaba de llegar de la nube */
+  function refreshMenu() {
+    if (!mu.cells) { return; }
+    menuItems = loadMenu();
+    renderMenu();
+  }
+
+
+  /* ---------- Mejoras: tablero de tareas ----------
+     Subpestaña «Mejoras» del panel del menú. Una columna por ingesta, más una
+     General al principio, y tarjetas que se arrastran de una a otra y se
+     ordenan a mano dentro de cada una, como en el menú. */
+
+  var TASK_COLS = ['General'].concat(PLAN_TITLES);   // General + las cinco del plan
+  var TASK_GROUP_DEF = 'general';                    // el grupo de alimentos por defecto
+  var tasks = [];   // { id, col, text, group, notes, pos }
+  var tu = {};
+
+  /* Los grupos de alimentos de la barra lateral, con «General» delante */
+  function taskGroups() {
+    return [{ group: TASK_GROUP_DEF, label: 'General', emoji: '' }].concat(allFoodGroups());
+  }
+
+  function taskGroupOf(id) {
+    var list = taskGroups();
+    var i;
+
+    for (i = 0; i < list.length; i++) {
+      if (list[i].group === id) { return list[i]; }
+    }
+
+    /* El grupo ya no está en la barra lateral: al menos se lee su nombre */
+    return { group: id, label: upperFirst(String(id).replace(/-/g, ' ')), emoji: '' };
+  }
+
+  function taskId() {
+    return 't-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  /* Una mejora puede llevar varios grupos. `groups` es la lista; el viejo
+     `group` (uno solo) se sigue leyendo, para las que se guardaron antes.
+     Sin ninguno marcado se queda en General, que nunca está vacío. */
+  function cleanTaskGroups(rec) {
+    var raw = Array.isArray(rec.groups) ? rec.groups : (rec.group ? [rec.group] : []);
+    var out = [];
+
+    raw.forEach(function (value) {
+      var id = cleanName(value);
+      if (id && out.indexOf(id) === -1) { out.push(id); }
+    });
+
+    /* O General o grupos de alimentos, nunca las dos cosas: si vienen juntas
+       (de un archivo, o de una versión anterior), manda lo concreto. */
+    if (out.length > 1) {
+      out = out.filter(function (id) { return id !== TASK_GROUP_DEF; });
+    }
+
+    if (!out.length) { out.push(TASK_GROUP_DEF); }
+    return out;
+  }
+
+  function isDefaultGroups(list) {
+    return list.length === 1 && list[0] === TASK_GROUP_DEF;
+  }
+
+  /* Las notas son de varias líneas: ni se aplastan los saltos como en los
+     títulos ni se les quita nada que no sean los espacios de los extremos. */
+  function cleanNotes(value) {
+    return String(value || '').replace(/\r\n/g, '\n').replace(/^\s+|\s+$/g, '').slice(0, 2000);
+  }
+
+  /* Solo pasa lo que cabe en el tablero: columna 0-5 y un título */
+  function cleanTaskRec(id, rec) {
+    var col = Math.floor(Number(rec.col));
+    var text = cleanName(rec.text);
+    var pos = Math.floor(Number(rec.pos));
+    var task;
+
+    if (!id || !text) { return null; }
+    if (!(col >= 0 && col < TASK_COLS.length)) { return null; }
+
+    task = {
+      id: String(id),
+      col: col,
+      text: text,
+      groups: cleanTaskGroups(rec),
+      notes: cleanNotes(rec.notes)
+    };
+
+    if (pos >= 0) { task.pos = pos; }
+    return task;
+  }
+
+  function taskRec(task) {
+    var rec = { id: task.id, col: task.col, text: task.text };
+
+    if (typeof task.pos === 'number') { rec.pos = task.pos; }
+    /* Lo de relleno no se manda: ni General a secas ni unas notas vacías */
+    if (task.groups && !isDefaultGroups(task.groups)) { rec.groups = task.groups.slice(); }
+    if (task.notes) { rec.notes = task.notes; }
+    return rec;
+  }
+
+  /* Como en el menú: `pos` se normaliza al cargar (0, 1, 2… por columna) y no
+     se escribe nada hasta que se guarde algo. */
+  function loadTasks() {
+    var map = storeCopy(S_TASKS);
+    var list = [];
+    var seen = {};
+
+    Object.keys(map).forEach(function (id) {
+      var task = cleanTaskRec(id, map[id]);
+      if (task) { list.push(task); }
+    });
+
+    list.sort(byPosition);
+
+    list.forEach(function (task) {
+      seen[task.col] = seen[task.col] === undefined ? 0 : seen[task.col] + 1;
+      task.pos = seen[task.col];
+    });
+
+    return list;
+  }
+
+  function saveTasks() {
+    var map = {};
+    tasks.forEach(function (task) { map[task.id] = taskRec(task); });
+    storeCommit(S_TASKS, map);
+  }
+
+  function taskById(id) {
+    for (var i = 0; i < tasks.length; i++) {
+      if (tasks[i].id === id) { return tasks[i]; }
+    }
+    return null;
+  }
+
+  /* El equivalente de placeInCell(): coloca y renumera la columna entera */
+  function placeInTaskCol(task, col, index) {
+    var list = tasks.filter(function (other) {
+      return other !== task && other.col === col;
+    }).sort(byPosition);
+
+    var at = Math.max(0, Math.min(index, list.length));
+
+    task.col = col;
+    list.splice(at, 0, task);
+    list.forEach(function (other, i) { other.pos = i; });
+  }
+
+  /* ---------- Pintado del tablero ---------- */
+
+  function taskChip(label, food) {
+    var chip = document.createElement('span');
+
+    /* General y las ingestas van en gris; los grupos de alimentos, en verde */
+    chip.className = food ? 'task-chip task-chip--food' : 'task-chip';
+    chip.textContent = label;
+    return chip;
+  }
+
+  /* En el tablero se ven el título y unas pastillas; las notas, solo al abrir
+     la tarea. Qué pastillas depende de la vista: por ingesta se ven los grupos
+     de alimentos (la ingesta ya la dice la columna) y por alimentos, al revés. */
+  function buildTaskCard(task, byGroup) {
+    var li = document.createElement('li');
+    var btn = document.createElement('button');
+    var title = document.createElement('span');
+    var chips = document.createElement('span');
+    var labels = [];
+
+    li.className = 'task-row';
+    li.dataset.id = task.id;
+
+    /* Arrastrar solo tiene sentido en la vista por ingesta: es la que ordena
+       y la que manda en la columna. */
+    if (!byGroup) { li.setAttribute('draggable', 'true'); }
+
+    btn.type = 'button';
+    btn.className = 'task-card';
+    btn.dataset.id = task.id;
+
+    title.className = 'task-card__title';
+    title.textContent = task.text;
+
+    chips.className = 'task-card__chips';
+
+    if (byGroup) {
+      labels.push(TASK_COLS[task.col]);
+      chips.appendChild(taskChip(TASK_COLS[task.col], false));
+    } else {
+      task.groups.forEach(function (id) {
+        var group = taskGroupOf(id);
+        var label = group.emoji ? group.emoji + ' ' + group.label : group.label;
+
+        chips.appendChild(taskChip(label, id !== TASK_GROUP_DEF));
+        labels.push(group.label);
+      });
+    }
+
+    btn.setAttribute('aria-label', 'Abrir ' + task.text + ' (' + labels.join(', ') + ')');
+    btn.appendChild(title);
+    btn.appendChild(chips);
+    li.appendChild(btn);
+    return li;
+  }
+
+  function renderTasks() {
+    if (!tu.cols) { return; }
+
+    /* El orden de la columna es el del array, como en el menú */
+    tasks.sort(byPosition);
+    tu.cols.forEach(function (col) { col.list.innerHTML = ''; });
+
+    tasks.forEach(function (task) {
+      var col = tu.cols[task.col];
+      if (col) { col.list.appendChild(buildTaskCard(task, false)); }
+    });
+
+    tu.cols.forEach(function (col) {
+      col.count.textContent = col.list.querySelectorAll('.task-row').length;
+    });
+
+    renderTasksByGroup();
+  }
+
+  /* La otra vista: las mismas tareas, pero en columnas por grupo de alimentos.
+     Una tarea con varios grupos sale en cada uno de ellos. */
+  function renderTasksByGroup() {
+    if (!tu.gcols) { return; }
+
+    Object.keys(tu.gcols).forEach(function (key) { tu.gcols[key].list.innerHTML = ''; });
+
+    tasks.forEach(function (task) {
+      task.groups.forEach(function (id) {
+        var col = tu.gcols[id];
+        if (col) { col.list.appendChild(buildTaskCard(task, true)); }
+      });
+    });
+
+    Object.keys(tu.gcols).forEach(function (key) {
+      var col = tu.gcols[key];
+      col.count.textContent = col.list.querySelectorAll('.task-row').length;
+    });
+  }
+
+  /* Los dos tableros los pinta el JS: no hay nada que enseñar sin él */
+  function buildTaskColBox(label, general) {
+    var box = document.createElement('section');
+    var head = document.createElement('header');
+    var title = document.createElement('h2');
+    var count = document.createElement('span');
+    var list = document.createElement('ul');
+
+    box.className = general ? 'tasks-col tasks-col--general' : 'tasks-col';
+
+    head.className = 'tasks-col__head';
+    title.textContent = label;
+    count.className = 'count';
+    count.textContent = '0';
+    head.appendChild(title);
+    head.appendChild(count);
+
+    list.className = 'tasks-list';
+    box.appendChild(head);
+    box.appendChild(list);
+
+    return { box: box, list: list, count: count };
+  }
+
+  function buildTaskCol(index) {
+    var col = buildTaskColBox(TASK_COLS[index], index === 0);
+
+    col.box.dataset.col = index;
+    buildTaskAdder(col.box, TASK_COLS[index], index);
+    tu.board.appendChild(col.box);
+
+    return { col: index, list: col.list, count: col.count };
+  }
+
+  function buildTaskBoard() {
+    var i;
+
+    tu.board.innerHTML = '';
+    tu.cols = [];
+
+    for (i = 0; i < TASK_COLS.length; i++) { tu.cols.push(buildTaskCol(i)); }
+  }
+
+  /* En el tablero por grupos se puede añadir, pero no arrastrar: una tarea
+     puede estar en varios grupos, así que moverla de columna no querría decir
+     nada claro. Los grupos se cambian abriendo la tarea. */
+  function buildTaskGroupBoard() {
+    if (!tu.gboard) { return; }
+
+    tu.gboard.innerHTML = '';
+    tu.gcols = {};
+
+    taskGroups().forEach(function (group) {
+      var label = group.emoji ? group.emoji + ' ' + group.label : group.label;
+      var col = buildTaskColBox(label, group.group === TASK_GROUP_DEF);
+
+      col.box.dataset.group = group.group;
+
+      /* La ingesta que toque ya se elige en el modal: aquí entra en General */
+      buildTaskAdder(col.box, group.label, 0, group.group);
+
+      tu.gboard.appendChild(col.box);
+      tu.gcols[group.group] = { list: col.list, count: col.count };
+    });
+  }
+
+  /* Añadir abre el modal con lo de esa columna ya elegido: la ingesta en el
+     tablero por ingesta y el grupo de alimentos en el otro. */
+  function buildTaskAdder(box, label, col, group) {
+    var wrap = document.createElement('div');
+    var btn = document.createElement('button');
+
+    wrap.className = 'adder adder--task';
+
+    btn.type = 'button';
+    btn.className = 'adder__btn';
+    btn.textContent = '+ Añadir';
+    btn.setAttribute('aria-label', 'Añadir mejora a ' + label);
+    btn.addEventListener('click', function () { openTaskModal(col, null, group); });
+
+    wrap.appendChild(btn);
+    box.appendChild(wrap);      // debajo de la lista, como en Trello
+  }
+
+  /* ---------- Modal: la ficha de la tarea ----------
+     La única forma de dar de alta, de ver las notas y de editar, como el modal
+     de las ingestas y el del menú. */
+
+  /* Las casillas se rehacen cada vez que se abre: los grupos salen de la barra
+     lateral y ahí se pueden renombrar o añadir. Los guardados que ya no estén
+     se añaden igualmente, marcados, para no perderlos al guardar. */
+  function fillTaskGroups(selected) {
+    var chosen = selected.slice();
+    var seen = {};
+
+    tu.groups.innerHTML = '';
+
+    taskGroups().forEach(function (group) {
+      var label = group.emoji ? group.emoji + ' ' + group.label : group.label;
+
+      seen[group.group] = true;
+      tu.groups.appendChild(foodOption(group.group, label, chosen.indexOf(group.group) !== -1));
+    });
+
+    chosen.forEach(function (id) {
+      if (seen[id]) { return; }
+      tu.groups.appendChild(foodOption(id, taskGroupOf(id).label, true));
+    });
+
+    exclusiveTaskGroups(null);
+  }
+
+  /* General y los grupos de alimentos **se excluyen**: marcar General quita los
+     demás, marcar cualquier otro quita General, y sin ninguno vuelve General.
+     `changed` es la casilla que se acaba de tocar, o null al abrir el modal. */
+  function exclusiveTaskGroups(changed) {
+    var general = null;
+    var others = [];
+    var alguno;
+
+    tu.groups.querySelectorAll('input[type="checkbox"]').forEach(function (input) {
+      if (input.value === TASK_GROUP_DEF) { general = input; } else { others.push(input); }
+    });
+
+    if (!general) { return; }
+
+    if (changed === general && general.checked) {
+      others.forEach(function (input) { input.checked = false; });
+      return;
+    }
+
+    alguno = others.some(function (input) { return input.checked; });
+
+    if (alguno) { general.checked = false; } else { general.checked = true; }
+  }
+
+  /* Sin ninguna marcada se queda en General: la mejora siempre tiene grupo */
+  function readTaskGroups() {
+    var out = [];
+
+    tu.groups.querySelectorAll('input:checked').forEach(function (input) {
+      out.push(input.value);
+    });
+
+    return out.length ? out : [TASK_GROUP_DEF];
+  }
+
+  /* `group` solo se usa al dar de alta desde el tablero por grupos: es el
+     grupo de esa columna, que entra ya marcado. */
+  function openTaskModal(col, task, group) {
+    var editing = task || null;
+
+    if (!tu.modal) { return; }
+
+    tu.editing = editing;
+    tu.col = editing ? editing.col : col;
+    tu.head.textContent = editing ? 'Editar mejora' : 'Nueva mejora';
+    tu.del.hidden = !editing;            // solo se puede borrar lo que ya existe
+    tu.text.value = editing ? editing.text : '';
+    tu.notes.value = editing ? editing.notes : '';
+    tu.colSel.value = String(tu.col);
+    fillTaskGroups(editing ? editing.groups : [group || TASK_GROUP_DEF]);
+
+    if (typeof tu.modal.showModal === 'function') { tu.modal.showModal(); }
+    else { tu.modal.setAttribute('open', ''); }   // navegador sin <dialog>
+
+    tu.text.focus();
+    tu.text.select();
+  }
+
+  function closeTaskModal() {
+    tu.editing = null;
+
+    if (typeof tu.modal.close === 'function') { tu.modal.close(); }
+    else { tu.modal.removeAttribute('open'); }
+
+    repaintPending();            // lo que llegó de la nube con el modal abierto
+  }
+
+  /* La columna sale del desplegable, así que cambiar la ingesta mueve la tarea */
+  function readTaskCol() {
+    var col = Math.floor(Number(tu.colSel.value));
+    return (col >= 0 && col < TASK_COLS.length) ? col : tu.col;
+  }
+
+  function submitTaskModal(e) {
+    e.preventDefault();
+
+    var text = cleanName(tu.text.value);
+    var notes = cleanNotes(tu.notes.value);
+    var groups = readTaskGroups();
+    var col = readTaskCol();
+    var task;
+
+    if (!text) { tu.text.focus(); return; }
+
+    if (tu.editing) {
+      tu.editing.text = text;
+      tu.editing.groups = groups;
+      tu.editing.notes = notes;
+
+      /* Si ha cambiado de ingesta, entra la última de su nueva columna */
+      if (tu.editing.col !== col) { placeInTaskCol(tu.editing, col, Infinity); }
+    } else {
+      task = { id: taskId(), col: col, text: text, groups: groups, notes: notes };
+      tasks.push(task);
+      placeInTaskCol(task, col, Infinity);
+    }
+
+    renderTasks();
+    saveTasks();
+    closeTaskModal();
+  }
+
+  /* Devuelve si se llegó a borrar: en el modal hace falta para saber si cerrarlo */
+  function removeTask(task) {
+    if (!task) { return false; }
+    if (!window.confirm('¿Eliminar «' + task.text + '»?')) { return false; }
+
+    tasks.splice(tasks.indexOf(task), 1);
+    renderTasks();
+    saveTasks();
+    return true;
+  }
+
+  /* ---------- Arrastrar y soltar ----------
+     Copia de lo del menú, encerrado en el tablero: los escuchadores globales de
+     `init()` solo miran `.card` y `.column`, así que no se pisan. */
+
+  function clearTaskOver() {
+    if (!tu.board) { return; }
+
+    tu.board.querySelectorAll('.tasks-col--over, .task-row--drop, .task-row--drop-end')
+      .forEach(function (el) {
+        el.classList.remove('tasks-col--over');
+        el.classList.remove('task-row--drop');
+        el.classList.remove('task-row--drop-end');
+      });
+  }
+
+  function taskDropIndex(box, y) {
+    var rows = box.querySelectorAll('.task-row');
+    var index = 0;
+    var i;
+    var rect;
+
+    for (i = 0; i < rows.length; i++) {
+      if (rows[i].dataset.id === tu.dragId) { continue; }
+
+      rect = rows[i].getBoundingClientRect();
+      if (y < rect.top + rect.height / 2) { return index; }
+      index++;
+    }
+
+    return index;
+  }
+
+  function markTaskDropSpot(box, y) {
+    var rows = box.querySelectorAll('.task-row');
+    var index = taskDropIndex(box, y);
+    var seen = 0;
+    var last = null;
+    var i;
+
+    for (i = 0; i < rows.length; i++) {
+      if (rows[i].dataset.id === tu.dragId) { continue; }
+
+      if (seen === index) { rows[i].classList.add('task-row--drop'); return; }
+      last = rows[i];
+      seen++;
+    }
+
+    if (last) { last.classList.add('task-row--drop-end'); }
+  }
+
+  function moveTask(id, col, index) {
+    var task = taskById(id);   // por id, no por objeto: la nube puede rehacer el array
+
+    if (!task) { return; }
+    if (!(col >= 0 && col < TASK_COLS.length)) { return; }
+
+    placeInTaskCol(task, col, index);
+    renderTasks();
+    saveTasks();
+  }
+
+  function initTasksDrag() {
+    tu.board.addEventListener('dragstart', function (e) {
+      var li = e.target.closest ? e.target.closest('.task-row') : null;
+      if (!li) { return; }
+
+      tu.dragId = li.dataset.id;
+      li.classList.add('task-row--dragging');
+
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', li.dataset.id);
+      }
+    });
+
+    tu.board.addEventListener('dragend', function (e) {
+      var li = e.target.closest ? e.target.closest('.task-row') : null;
+
+      if (li) { li.classList.remove('task-row--dragging'); }
+      tu.dragId = null;
+      clearTaskOver();
+      repaintPending();
+    });
+
+    tu.board.addEventListener('dragover', function (e) {
+      var box = e.target.closest ? e.target.closest('.tasks-col') : null;
+      if (!box || !tu.dragId) { return; }
+
+      e.preventDefault();
+      if (e.dataTransfer) { e.dataTransfer.dropEffect = 'move'; }
+
+      clearTaskOver();
+      box.classList.add('tasks-col--over');
+      markTaskDropSpot(box, e.clientY);
+    });
+
+    tu.board.addEventListener('dragleave', function (e) {
+      var box = e.target.closest ? e.target.closest('.tasks-col') : null;
+      if (box && !box.contains(e.relatedTarget)) { clearTaskOver(); }
+    });
+
+    tu.board.addEventListener('drop', function (e) {
+      var box = e.target.closest ? e.target.closest('.tasks-col') : null;
+      if (!box || !tu.dragId) { return; }
+
+      var index = taskDropIndex(box, e.clientY);
+
+      e.preventDefault();
+      clearTaskOver();
+      moveTask(tu.dragId, Number(box.dataset.col), index);
+      tu.dragId = null;
+    });
+  }
+
+  function initTasks() {
+    tu.board = document.getElementById('tasks-board');
+    if (!tu.board) { return; }
+
+    tu.gboard = document.getElementById('tasks-board-groups');
+
+    buildTaskBoard();
+    buildTaskGroupBoard();
+    tasks = loadTasks();
+    renderTasks();
+    initTasksDrag();
+
+    /* Pulsar una tarjeta abre su ficha, en cualquiera de los dos tableros */
+    document.getElementById('panel-mejoras').addEventListener('click', function (e) {
+      var btn = e.target.closest('.task-card');
+      if (!btn) { return; }
+
+      var task = taskById(btn.dataset.id);
+      if (task) { openTaskModal(task.col, task); }
+    });
+
+    /* Sin modal el tablero se sigue viendo, pero no se puede tocar nada */
+    tu.modal = document.getElementById('task-modal');
+    if (!tu.modal) { return; }
+
+    tu.form = document.getElementById('task-modal-form');
+    tu.head = document.getElementById('task-modal-title');
+    tu.text = document.getElementById('task-modal-text');
+    tu.colSel = document.getElementById('task-modal-col');
+    tu.groups = document.getElementById('task-modal-groups');
+    tu.notes = document.getElementById('task-modal-notes');
+    tu.del = document.getElementById('task-modal-delete');
+
+    tu.form.addEventListener('submit', submitTaskModal);
+
+    /* Al marcar o desmarcar un grupo se recolocan las casillas: o General o los
+       demás, nunca las dos cosas */
+    tu.groups.addEventListener('change', function (e) {
+      if (e.target && e.target.type === 'checkbox') { exclusiveTaskGroups(e.target); }
+    });
+    document.getElementById('task-modal-close').addEventListener('click', closeTaskModal);
+    document.getElementById('task-modal-cancel').addEventListener('click', closeTaskModal);
+
+    tu.del.addEventListener('click', function () {
+      if (removeTask(tu.editing)) { closeTaskModal(); }
+    });
+
+    /* Clic en el fondo oscuro = cerrar (Esc ya lo gestiona <dialog>) */
+    tu.modal.addEventListener('click', function (e) {
+      if (e.target === tu.modal) { closeTaskModal(); }
+    });
+
+    /* Cerrar con Esc no pasa por closeTaskModal(): hay que soltar la edición igual */
+    tu.modal.addEventListener('close', function () {
+      tu.editing = null;
+      repaintPending();
+    });
+  }
+
+  /* Vuelve a pintar el tablero con lo que acaba de llegar de la nube */
+  function refreshTasks() {
+    if (!tu.cols) { return; }
+    tasks = loadTasks();
+    renderTasks();
+  }
+
+
   /* ---------- Ajustes: exportar e importar ---------- */
 
   var BACKUP_APP = 'misAlimentos';   // marca del archivo, para no importar cualquier JSON
@@ -2077,7 +3590,9 @@
       exported: new Date().toISOString(),
       alimentos: { version: 2, items: storeCopy(S_FOODS) },
       recetas: mapToList(storeGet(S_RECIPES)),
-      ingestas: mapToList(storeGet(S_INTAKES))
+      ingestas: mapToList(storeGet(S_INTAKES)),
+      menu: mapToList(storeGet(S_MENU)),
+      mejoras: mapToList(storeGet(S_TASKS))
     };
   }
 
@@ -2172,6 +3687,19 @@
         });
     }
 
+    /* El menú se revalida como todo lo demás: día, fila, nombre y alimentos */
+    if (Array.isArray(data.menu)) {
+      backup.menu = data.menu
+        .map(function (m) { return m && m.id ? cleanMenuRec(m.id, m) : null; })
+        .filter(function (m) { return !!m; });
+    }
+
+    if (Array.isArray(data.mejoras)) {
+      backup.mejoras = data.mejoras
+        .map(function (t) { return t && t.id ? cleanTaskRec(t.id, t) : null; })
+        .filter(function (t) { return !!t; });
+    }
+
     return Object.keys(backup).length ? backup : null;
   }
 
@@ -2186,6 +3714,12 @@
     if (backup.ingestas) {
       parts.push(backup.ingestas.length + (backup.ingestas.length === 1 ? ' ingesta' : ' ingestas'));
     }
+    if (backup.menu) {
+      parts.push(backup.menu.length + (backup.menu.length === 1 ? ' receta del menú' : ' recetas del menú'));
+    }
+    if (backup.mejoras) {
+      parts.push(backup.mejoras.length + (backup.mejoras.length === 1 ? ' mejora' : ' mejoras'));
+    }
 
     if (parts.length < 2) { return parts[0] || ''; }
     return parts.slice(0, -1).join(', ') + ' y ' + parts[parts.length - 1];
@@ -2198,6 +3732,8 @@
     if (backup.alimentos) { storeCommit(S_FOODS, backup.alimentos.items); }
     if (backup.recetas) { storeCommit(S_RECIPES, listToMap(backup.recetas)); }
     if (backup.ingestas) { storeCommit(S_INTAKES, listToMap(backup.ingestas)); }
+    if (backup.menu) { storeCommit(S_MENU, listToMap(backup.menu.map(menuRec))); }
+    if (backup.mejoras) { storeCommit(S_TASKS, listToMap(backup.mejoras.map(taskRec))); }
   }
 
   function settingsMsg(text, bad) {
@@ -2227,11 +3763,13 @@
 
       writeBackup(backup);
 
-      /* Se repintan las tres secciones en vez de recargar la página: recargar
-         cortaría las escrituras que aún van camino de la nube. */
+      /* Se repintan las secciones tocadas en vez de recargar la página:
+         recargar cortaría las escrituras que aún van camino de la nube. */
       if (backup.alimentos) { rebuildCards(); }
       if (backup.recetas) { refreshRecipes(); }
       if (backup.ingestas) { refreshIntakes(); }
+      if (backup.menu) { refreshMenu(); }
+      if (backup.mejoras) { refreshTasks(); }
 
       settingsMsg('Datos importados.');
     };
@@ -2373,6 +3911,42 @@
     render();
   }
 
+  /* ---------- La pestaña abierta ----------
+     Se recuerda en este navegador (no se sincroniza: es una preferencia, no un
+     dato) para volver a ella al recargar. */
+
+  function rememberTab(id) {
+    try { localStorage.setItem(TAB_KEY, id); } catch (e) { /* sin persistencia: se abrirá en Menú */ }
+  }
+
+  /* Devuelve si la ha podido abrir: lo guardado puede ser de una pestaña que
+     ya no existe, o cualquier otra cosa. */
+  function showTab(id) {
+    var tab = id ? document.getElementById(id) : null;
+
+    if (!tab || !tab.classList.contains('tab-state') || tab.name !== 'grupo') { return false; }
+
+    tab.checked = true;
+    rememberTab(id);
+    return true;
+  }
+
+  /* Al arrancar: donde se quedó y, si no hay nada guardado, en Menú */
+  function showSavedTab() {
+    var saved = null;
+
+    try { saved = localStorage.getItem(TAB_KEY); } catch (e) { saved = null; }
+    if (!showTab(saved)) { showMenuTab(); }
+  }
+
+  function keepTabState() {
+    document.querySelectorAll('.tab-state[name="grupo"]').forEach(function (tab) {
+      tab.addEventListener('change', function () {
+        if (tab.checked) { rememberTab(tab.id); }
+      });
+    });
+  }
+
   /* Recuerda qué secciones de la barra lateral quedaron abiertas */
   function keepNavGroupState() {
     document.querySelectorAll('.nav-group[id]').forEach(function (group) {
@@ -2403,14 +3977,17 @@
   }
 
   function init() {
-    /* La app siempre aterriza en Ingestas, y lo primero, para no enseñar otra
-       pestaña antes. En el HTML sigue marcada Carne: sin JS se ve la lista de alimentos */
-    showIntakesTab();
+    /* La pestaña donde se quedó, y lo primero, para no enseñar otra antes. En
+       el HTML sigue marcada Carne: sin JS se ve la lista de alimentos */
+    showSavedTab();
+    keepTabState();
     collectSeeds();
     build(loadData());
     render();
     initRecipes();
     initIntakes();
+    initMenu();
+    initTasks();
     initSettings();
     keepNavGroupState();
     closeNavOnPick();

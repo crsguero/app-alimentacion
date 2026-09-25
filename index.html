@@ -49,6 +49,9 @@
 
   <!-- Estado de la navegación: un radio por pestaña -->
   <input class="tab-state" type="radio" name="grupo" id="tab-ingestas">
+  <input class="tab-state" type="radio" name="grupo" id="tab-menu">
+  <input class="tab-state" type="radio" name="grupo" id="tab-menu-alimentos">
+  <input class="tab-state" type="radio" name="grupo" id="tab-mejoras">
   <input class="tab-state" type="radio" name="grupo" id="tab-recetario">
   <input class="tab-state" type="radio" name="grupo" id="tab-carne" checked>
   <input class="tab-state" type="radio" name="grupo" id="tab-pescado">
@@ -59,6 +62,9 @@
   <input class="tab-state" type="radio" name="grupo" id="tab-lacteos">
   <input class="tab-state" type="radio" name="grupo" id="tab-huevos">
   <input class="tab-state" type="radio" name="grupo" id="tab-frutos-secos">
+  <input class="tab-state" type="radio" name="grupo" id="tab-semillas">
+  <input class="tab-state" type="radio" name="grupo" id="tab-especias">
+  <input class="tab-state" type="radio" name="grupo" id="tab-otros">
 
   <!-- Estado del menú lateral en móvil: abierto o cerrado -->
   <input class="tab-state" type="checkbox" id="nav-toggle" aria-label="Menú">
@@ -88,6 +94,9 @@
     <details class="nav-group" id="nav-alimentacion" open>
       <summary class="nav-group__head">Alimentación</summary>
       <nav class="nav" aria-label="Alimentación">
+        <label class="nav__item" for="tab-menu"><span class="nav__emoji">🗓️</span><span class="nav__label">Menú</span></label>
+        <label class="nav__item" for="tab-menu-alimentos"><span class="nav__emoji">🥗</span><span class="nav__label">Alimentos</span></label>
+        <label class="nav__item" for="tab-mejoras"><span class="nav__emoji">✨</span><span class="nav__label">Mejoras</span></label>
         <label class="nav__item" for="tab-ingestas"><span class="nav__emoji">🥣</span><span class="nav__label">Ingestas</span></label>
       </nav>
     </details>
@@ -103,14 +112,17 @@
       <summary class="nav-group__head">Alimentos</summary>
       <nav class="nav" aria-label="Grupos de alimentos">
         <label class="nav__item" for="tab-carne"><span class="nav__emoji">🥩</span><span class="nav__label">Carne</span></label>
-        <label class="nav__item" for="tab-pescado"><span class="nav__emoji">🐟</span><span class="nav__label">Pescado y marisco</span></label>
+        <label class="nav__item" for="tab-pescado"><span class="nav__emoji">🐟</span><span class="nav__label">Pescado</span></label>
         <label class="nav__item" for="tab-frutas"><span class="nav__emoji">🍎</span><span class="nav__label">Frutas</span></label>
         <label class="nav__item" for="tab-verduras"><span class="nav__emoji">🥦</span><span class="nav__label">Verduras</span></label>
         <label class="nav__item" for="tab-legumbres"><span class="nav__emoji">🫘</span><span class="nav__label">Legumbres</span></label>
-        <label class="nav__item" for="tab-cereales"><span class="nav__emoji">🌾</span><span class="nav__label">Cereales y pasta</span></label>
+        <label class="nav__item" for="tab-cereales"><span class="nav__emoji">🌾</span><span class="nav__label">Cereales</span></label>
         <label class="nav__item" for="tab-lacteos"><span class="nav__emoji">🧀</span><span class="nav__label">Lácteos</span></label>
         <label class="nav__item" for="tab-huevos"><span class="nav__emoji">🥚</span><span class="nav__label">Huevos</span></label>
         <label class="nav__item" for="tab-frutos-secos"><span class="nav__emoji">🥜</span><span class="nav__label">Frutos secos</span></label>
+        <label class="nav__item" for="tab-semillas"><span class="nav__emoji">🌱</span><span class="nav__label">Semillas</span></label>
+        <label class="nav__item" for="tab-especias"><span class="nav__emoji">🌶️</span><span class="nav__label">Especias</span></label>
+        <label class="nav__item" for="tab-otros"><span class="nav__emoji">🧺</span><span class="nav__label">Otros</span></label>
       </nav>
     </details>
 
@@ -160,6 +172,78 @@
         </nav>
 
         <div class="summary" id="summary"></div>
+      </section>
+    </section>
+
+    <!-- MENÚ -->
+    <section class="panel" id="panel-menu">
+      <header class="panel__head">
+        <h1><span class="panel__emoji">🗓️</span> Menú</h1>
+      </header>
+
+      <!-- Siete columnas (una por día) y cinco filas, todas del mismo tamaño.
+           Los role= reponen la semántica de tabla, que se pierde al pintarla
+           como rejilla (ver styles.css). -->
+      <table class="menu-week" id="menu-week" role="table" aria-label="Menú de la semana">
+        <thead role="rowgroup">
+          <tr role="row">
+            <th role="columnheader" scope="col">Lunes</th>
+            <th role="columnheader" scope="col">Martes</th>
+            <th role="columnheader" scope="col">Miércoles</th>
+            <th role="columnheader" scope="col">Jueves</th>
+            <th role="columnheader" scope="col">Viernes</th>
+            <th role="columnheader" scope="col">Sábado</th>
+            <th role="columnheader" scope="col">Domingo</th>
+          </tr>
+        </thead>
+        <tbody role="rowgroup">
+          <tr role="row">
+            <td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td>
+          </tr>
+          <tr role="row">
+            <td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td>
+          </tr>
+          <tr role="row">
+            <td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td>
+          </tr>
+          <tr role="row">
+            <td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td>
+          </tr>
+          <tr role="row">
+            <td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td><td role="cell"></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ALIMENTOS DEL MENÚ: qué lleva, por grupos. Las tarjetas las pinta app.js -->
+    <section class="panel" id="panel-menu-alimentos">
+      <header class="panel__head">
+        <h1><span class="panel__emoji">🥗</span> Alimentos</h1>
+      </header>
+      <div class="menu-groups" id="menu-groups"></div>
+    </section>
+
+    <!-- MEJORAS: dos tableros de las mismas tareas. Los pinta app.js -->
+    <section class="panel" id="panel-mejoras">
+      <!-- Estado de la subpestaña: por ingesta o por grupo de alimentos -->
+      <input class="tab-state" type="radio" name="tasks-view" id="tasks-view-ingesta" checked>
+      <input class="tab-state" type="radio" name="tasks-view" id="tasks-view-alimentos">
+
+      <header class="panel__head panel__head--row">
+        <h1><span class="panel__emoji">✨</span> Mejoras</h1>
+        <div class="subtabs subtabs--head js-only">
+          <label class="subtab" for="tasks-view-ingesta">Por ingesta</label>
+          <label class="subtab" for="tasks-view-alimentos">Por alimentos</label>
+        </div>
+      </header>
+
+      <section class="tasks-view" id="tasks-por-ingesta">
+        <div class="tasks-board" id="tasks-board"></div>
+      </section>
+
+      <section class="tasks-view" id="tasks-por-alimentos">
+        <div class="tasks-board" id="tasks-board-groups"></div>
       </section>
     </section>
 
@@ -280,10 +364,10 @@
       </div>
     </section>
 
-    <!-- PESCADO Y MARISCO -->
+    <!-- PESCADO -->
     <section class="panel" id="panel-pescado">
       <header class="panel__head">
-        <h1><span class="panel__emoji">🐟</span> Pescado y marisco</h1>
+        <h1><span class="panel__emoji">🐟</span> Pescado</h1>
       </header>
       <div class="board">
         <section class="column column--todo">
@@ -417,10 +501,10 @@
       </div>
     </section>
 
-    <!-- CEREALES Y PASTA -->
+    <!-- CEREALES -->
     <section class="panel" id="panel-cereales">
       <header class="panel__head">
-        <h1><span class="panel__emoji">🌾</span> Cereales y pasta</h1>
+        <h1><span class="panel__emoji">🌾</span> Cereales</h1>
       </header>
       <div class="board">
         <section class="column column--todo">
@@ -546,6 +630,91 @@
       </div>
     </section>
 
+    <!-- SEMILLAS -->
+    <section class="panel" id="panel-semillas">
+      <header class="panel__head">
+        <h1><span class="panel__emoji">🌱</span> Semillas</h1>
+      </header>
+      <div class="board">
+        <section class="column column--todo">
+          <header class="column__head"><h2>Sin probar</h2><span class="count">5</span></header>
+          <ul class="cards">
+            <li class="card">Chía</li>
+            <li class="card">Lino</li>
+            <li class="card">Sésamo</li>
+            <li class="card">Amapola</li>
+            <li class="card">Cáñamo</li>
+          </ul>
+        </section>
+        <section class="column column--yes">
+          <header class="column__head"><h2>Me gusta</h2><span class="count">0</span></header>
+          <ul class="cards">
+          </ul>
+        </section>
+        <section class="column column--no">
+          <header class="column__head"><h2>No me gusta</h2><span class="count">0</span></header>
+          <ul class="cards">
+          </ul>
+        </section>
+      </div>
+    </section>
+
+    <!-- ESPECIAS -->
+    <section class="panel" id="panel-especias">
+      <header class="panel__head">
+        <h1><span class="panel__emoji">🌶️</span> Especias</h1>
+      </header>
+      <div class="board">
+        <section class="column column--todo">
+          <header class="column__head"><h2>Sin probar</h2><span class="count">8</span></header>
+          <ul class="cards">
+            <li class="card">Pimentón</li>
+            <li class="card">Pimienta negra</li>
+            <li class="card">Comino</li>
+            <li class="card">Curry</li>
+            <li class="card">Cúrcuma</li>
+            <li class="card">Canela</li>
+            <li class="card">Orégano</li>
+            <li class="card">Laurel</li>
+          </ul>
+        </section>
+        <section class="column column--yes">
+          <header class="column__head"><h2>Me gusta</h2><span class="count">0</span></header>
+          <ul class="cards">
+          </ul>
+        </section>
+        <section class="column column--no">
+          <header class="column__head"><h2>No me gusta</h2><span class="count">0</span></header>
+          <ul class="cards">
+          </ul>
+        </section>
+      </div>
+    </section>
+
+    <!-- OTROS: el cajón de sastre, sin lista de partida -->
+    <section class="panel" id="panel-otros">
+      <header class="panel__head">
+        <h1><span class="panel__emoji">🧺</span> Otros</h1>
+      </header>
+      <div class="board">
+        <section class="column column--todo">
+          <header class="column__head"><h2>Sin probar</h2><span class="count">0</span></header>
+          <ul class="cards">
+          </ul>
+        </section>
+        <section class="column column--yes">
+          <header class="column__head"><h2>Me gusta</h2><span class="count">0</span></header>
+          <ul class="cards">
+          </ul>
+        </section>
+        <section class="column column--no">
+          <header class="column__head"><h2>No me gusta</h2><span class="count">0</span></header>
+          <ul class="cards">
+          </ul>
+        </section>
+      </div>
+    </section>
+
   </main>
 
   <!-- Botón flotante: registrar una ingesta desde cualquier pestaña -->
@@ -595,6 +764,117 @@
     </form>
   </dialog>
 
+  <!-- Menú: una receta de una celda, con sus alimentos -->
+  <dialog class="modal" id="menu-modal" aria-labelledby="menu-modal-title">
+    <header class="modal__head">
+      <h2 class="modal__title" id="menu-modal-title">Nueva receta</h2>
+      <button class="btn btn--ghost" type="button" id="menu-modal-close" aria-label="Cerrar">✕</button>
+    </header>
+
+    <form class="modal__form" id="menu-modal-form">
+      <div class="field-row">
+        <label class="field">
+          <span class="field__label">Día</span>
+          <select id="menu-modal-day">
+            <option value="0">Lunes</option>
+            <option value="1">Martes</option>
+            <option value="2">Miércoles</option>
+            <option value="3">Jueves</option>
+            <option value="4">Viernes</option>
+            <option value="5">Sábado</option>
+            <option value="6">Domingo</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field__label">Fila</span>
+          <!-- El valor es la fila; el texto, el título que lleva esa fila -->
+          <select id="menu-modal-row">
+            <option value="0">Desayuno</option>
+            <option value="1">Media mañana</option>
+            <option value="2">Almuerzo</option>
+            <option value="3">Merienda</option>
+            <option value="4">Cena</option>
+          </select>
+        </label>
+      </div>
+
+      <label class="field">
+        <span class="field__label">Nombre</span>
+        <input type="text" id="menu-modal-name" maxlength="60" autocomplete="off" required>
+      </label>
+
+      <label class="field">
+        <span class="field__label">Tipo</span>
+        <select id="menu-modal-kind">
+          <option value="fijo">Fijo</option>
+          <option value="variable">Variable</option>
+          <option value="borrador">Borrador</option>
+        </select>
+      </label>
+
+      <div class="field picker">
+        <span class="field__label" id="menu-modal-foods-label">Alimentos asociados</span>
+        <!-- Los elegidos, todos juntos arriba; se quitan pulsándolos -->
+        <div class="picker__chosen" id="menu-modal-chosen"></div>
+        <input type="search" id="menu-modal-search" placeholder="Buscar alimento…" aria-label="Buscar alimento" autocomplete="off">
+        <!-- Las casillas las pone app.js con los alimentos de las pestañas -->
+        <div class="picker__list" id="menu-modal-foods" role="group" aria-labelledby="menu-modal-foods-label"></div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn" type="button" id="menu-modal-cancel">Cancelar</button>
+        <button class="btn btn--primary" type="submit">Guardar</button>
+        <button class="btn btn--wide" type="button" id="menu-modal-duplicate" hidden>⧉ Duplicar</button>
+        <button class="btn btn--danger" type="button" id="menu-modal-delete" hidden>🗑️ Eliminar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Mejoras: la ficha de una tarea del tablero -->
+  <dialog class="modal" id="task-modal" aria-labelledby="task-modal-title">
+    <header class="modal__head">
+      <h2 class="modal__title" id="task-modal-title">Nueva mejora</h2>
+      <button class="btn btn--ghost" type="button" id="task-modal-close" aria-label="Cerrar">✕</button>
+    </header>
+
+    <form class="modal__form" id="task-modal-form">
+      <label class="field">
+        <span class="field__label">Título</span>
+        <input type="text" id="task-modal-text" maxlength="120" autocomplete="off" required>
+      </label>
+
+      <label class="field">
+        <span class="field__label">Ingesta</span>
+        <!-- El valor es la columna del tablero -->
+        <select id="task-modal-col">
+          <option value="0">General</option>
+          <option value="1">Desayuno</option>
+          <option value="2">Media mañana</option>
+          <option value="3">Almuerzo</option>
+          <option value="4">Merienda</option>
+          <option value="5">Cena</option>
+        </select>
+      </label>
+
+      <div class="field picker">
+        <span class="field__label" id="task-modal-groups-label">Grupos de alimentos</span>
+        <!-- Las casillas las pone app.js con los grupos de la barra lateral -->
+        <div class="picker__list picker__list--short" id="task-modal-groups" role="group" aria-labelledby="task-modal-groups-label"></div>
+      </div>
+
+      <label class="field">
+        <span class="field__label">Notas</span>
+        <textarea id="task-modal-notes" rows="5" maxlength="2000"></textarea>
+      </label>
+
+      <div class="form-actions">
+        <button class="btn" type="button" id="task-modal-cancel">Cancelar</button>
+        <button class="btn btn--primary" type="submit">Guardar</button>
+        <button class="btn btn--danger" type="button" id="task-modal-delete" hidden>🗑️ Eliminar</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Ajustes: copia de seguridad de todo lo guardado -->
   <dialog class="modal" id="settings-modal" aria-labelledby="settings-modal-title">
     <header class="modal__head">
@@ -615,7 +895,7 @@
       <section class="settings-block">
         <h3 class="settings-block__title">Copia de seguridad</h3>
         <p class="settings-block__note">
-          Descarga en un archivo los alimentos, las recetas y las ingestas. Los datos ya se
+          Descarga en un archivo los alimentos, las recetas, las ingestas y el menú. Los datos ya se
           sincronizan solos entre dispositivos: esto es una copia aparte, por si acaso.
         </p>
         <button class="btn btn--primary settings-block__btn" type="button" id="settings-export">⬇️ Exportar datos</button>
